@@ -74,6 +74,7 @@ export default function GroupsPage() {
 
   const handleAddWordToGroup = (groupId: number) => {
     localStorage.setItem('default_add_word_group_id', String(groupId));
+    localStorage.setItem('latest_selected_group_id', String(groupId));
     setPage('vocabulary');
   };
 

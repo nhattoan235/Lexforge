@@ -1,0 +1,3 @@
+khi nhập từ vựng mới, không phải lúc nào người dung cũng biết nghĩa cho nên phần nghĩa nếu người dung không nhập thì AI sẽ tự nhập vào 1 - 2 nghĩa phổ biến của từ đó
+
+hien tai phần them từ có lỗi, cụ thể là khi tôi tạo nhóm và bấm + (nếu chỉ có mình nhóm đó thì từ sẽ được them vào nhóm đó, còn nếu có 1 nhóm mới tạo thì dù bấm + ở đâu thì từ cũng mặc định sẽ vào nhóm mới tạo) cho nên cần cho người dung chọn nhóm cố định, lưu lại nhóm mới nhất mà người dung chọn, cho đến khi người dung đổi nhóm thì tiếp tục cập nhật

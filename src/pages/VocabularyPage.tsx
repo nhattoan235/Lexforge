@@ -24,6 +24,8 @@ export default function VocabularyPage() {
   const englishInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({ groupId: 0, english: '', vietnamese: '', pronunciation: '', partOfSpeech: '', example: '', exampleVi: '' });
   const [isDirty, setIsDirty] = useState(false);
+  const [aiLookupLoading, setAiLookupLoading] = useState(false);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   // Selection & move
   const [selectedWords, setSelectedWords] = useState<number[]>([]);
@@ -72,7 +74,12 @@ export default function VocabularyPage() {
     if (wRes.success) setWords(wRes.data || []);
     if (gRes.success) {
       setGroups(gRes.data || []);
-      if (!form.groupId && gRes.data?.length) setForm(f => ({ ...f, groupId: gRes.data![0].Id }));
+      if (!form.groupId && gRes.data?.length) {
+        const savedGid = localStorage.getItem('latest_selected_group_id');
+        const validSavedGid = savedGid ? parseInt(savedGid) : 0;
+        const exists = gRes.data!.some(g => g.Id === validSavedGid);
+        setForm(f => ({ ...f, groupId: exists ? validSavedGid : gRes.data![0].Id }));
+      }
     }
     setLoading(false);
     return true;
@@ -86,7 +93,15 @@ export default function VocabularyPage() {
 
   const openCreate = () => {
     setEditWord(null);
-    const defaultGid = filterGroup !== 'all' ? filterGroup : (groups[0]?.Id || 0);
+    let defaultGid: number;
+    if (filterGroup !== 'all') {
+      defaultGid = filterGroup;
+    } else {
+      const savedGid = localStorage.getItem('latest_selected_group_id');
+      const validSavedGid = savedGid ? parseInt(savedGid) : 0;
+      const exists = groups.some(g => g.Id === validSavedGid);
+      defaultGid = exists ? validSavedGid : (groups[0]?.Id || 0);
+    }
     setForm({ groupId: defaultGid, english: '', vietnamese: '', pronunciation: '', partOfSpeech: 'noun', example: '', exampleVi: '' });
     setIsDirty(false);
     setShowModal(true);
@@ -95,8 +110,15 @@ export default function VocabularyPage() {
 
   const tryCloseModal = () => {
     if (isDirty) {
-      if (!window.confirm('Bạn có thay đổi chưa lưu. Hủy bỏ?')) return;
+      setShowCloseConfirm(true);
+      return;
     }
+    setShowModal(false);
+    setIsDirty(false);
+  };
+
+  const confirmCloseModal = () => {
+    setShowCloseConfirm(false);
     setShowModal(false);
     setIsDirty(false);
   };
@@ -109,19 +131,65 @@ export default function VocabularyPage() {
     setTimeout(() => englishInputRef.current?.focus(), 80);
   };
 
+  const handleAiLookup = async () => {
+    if (!form.english.trim()) return;
+    setAiLookupLoading(true);
+    try {
+      const result = await aiVocabService.lookupWord(form.english.trim());
+      setForm(f => ({
+        ...f,
+        vietnamese: result.vietnamese || f.vietnamese,
+        pronunciation: result.pronunciation || f.pronunciation,
+        partOfSpeech: result.partOfSpeech || f.partOfSpeech,
+        example: result.example || f.example,
+        exampleVi: result.exampleVi || f.exampleVi,
+      }));
+      setIsDirty(true);
+    } catch (err: any) {
+      console.error('AI lookup failed:', err);
+    } finally {
+      setAiLookupLoading(false);
+    }
+  };
+
   const handleSave = async (keepOpen = false) => {
-    if (!form.english.trim() || !form.vietnamese.trim() || !form.groupId) return;
+    if (!form.english.trim() || !form.groupId) return;
     setSaving(true);
+
+    // Lưu nhóm được chọn gần nhất
+    localStorage.setItem('latest_selected_group_id', String(form.groupId));
+
+    let finalForm = { ...form };
+
+    // Nếu nghĩa tiếng Việt trống, tự động gọi AI tra cứu
+    if (!finalForm.vietnamese.trim() && !editWord) {
+      try {
+        const result = await aiVocabService.lookupWord(finalForm.english.trim());
+        finalForm.vietnamese = result.vietnamese || '';
+        if (!finalForm.pronunciation) finalForm.pronunciation = result.pronunciation || '';
+        if (!finalForm.partOfSpeech) finalForm.partOfSpeech = result.partOfSpeech || '';
+        if (!finalForm.example) finalForm.example = result.example || '';
+        if (!finalForm.exampleVi) finalForm.exampleVi = result.exampleVi || '';
+      } catch (err) {
+        console.error('AI auto-lookup failed, saving without meaning:', err);
+      }
+    }
+
+    // Nếu vẫn không có nghĩa thì không lưu (trừ khi đang edit)
+    if (!finalForm.vietnamese.trim() && !editWord) {
+      setSaving(false);
+      return;
+    }
+
     if (editWord) {
-      await db.updateWord(editWord.Id, form);
+      await db.updateWord(editWord.Id, finalForm);
       setSaving(false);
       setShowModal(false);
     } else {
-      await db.createWord(form as any);
+      await db.createWord(finalForm as any);
       setSaving(false);
       if (keepOpen) {
-        // Quick-save: reset form keeping groupId, re-focus English
-        const savedGid = form.groupId;
+        const savedGid = finalForm.groupId;
         setForm({ groupId: savedGid, english: '', vietnamese: '', pronunciation: '', partOfSpeech: 'noun', example: '', exampleVi: '' });
         setIsDirty(false);
         setTimeout(() => englishInputRef.current?.focus(), 50);
@@ -140,7 +208,7 @@ export default function VocabularyPage() {
     if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); handleSave(true); return; }
     if (e.key === 'Enter' && !isTextarea) {
       e.preventDefault();
-      if (form.english.trim() && form.vietnamese.trim() && form.groupId) handleSave(true);
+      if (form.english.trim() && form.groupId) handleSave(true);
     }
   };
 
@@ -305,7 +373,16 @@ export default function VocabularyPage() {
 
       <div className="vocab-toolbar">
         <input className="input search-input" placeholder="🔍 Tìm kiếm từ vựng..." value={search} onChange={e => setSearch(e.target.value)} />
-        <select className="select group-filter" value={filterGroup} onChange={e => setFilterGroup(e.target.value === 'all' ? 'all' : +e.target.value)}>
+        <select className="select group-filter" value={filterGroup} onChange={e => {
+          const val = e.target.value;
+          if (val === 'all') {
+            setFilterGroup('all');
+          } else {
+            const gid = +val;
+            setFilterGroup(gid);
+            localStorage.setItem('latest_selected_group_id', String(gid));
+          }
+        }}>
           <option value="all">Tất cả nhóm</option>
           {groups.map(g => <option key={g.Id} value={g.Id}>{g.Icon} {g.Name}</option>)}
         </select>
@@ -421,11 +498,24 @@ export default function VocabularyPage() {
                   </div>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Nghĩa Tiếng Việt *</label>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <label className="form-label" style={{ margin: 0 }}>Nghĩa Tiếng Việt</label>
+                    {!editWord && form.english.trim() && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 4 }}
+                        disabled={aiLookupLoading}
+                        onClick={handleAiLookup}
+                      >
+                        {aiLookupLoading ? '⏳ Đang tra...' : '🪄 Điền nhanh AI'}
+                      </button>
+                    )}
+                  </div>
                   <input tabIndex={2} className="input" value={form.vietnamese}
                     onChange={e => { setForm({ ...form, vietnamese: e.target.value }); setIsDirty(true); }}
                     onKeyDown={e => handleInputKeyDown(e)}
-                    placeholder="hoàn thành, đạt được" />
+                    placeholder="hoàn thành, đạt được (để trống → AI tự điền)" />
                 </div>
               </div>
               <div className="form-row">
@@ -449,7 +539,12 @@ export default function VocabularyPage() {
               <div className="form-group">
                 <label className="form-label">Nhóm Từ *</label>
                 <select tabIndex={5} className="select" value={form.groupId}
-                  onChange={e => { setForm({ ...form, groupId: +e.target.value }); setIsDirty(true); }}
+                  onChange={e => {
+                    const gid = +e.target.value;
+                    setForm({ ...form, groupId: gid });
+                    setIsDirty(true);
+                    localStorage.setItem('latest_selected_group_id', String(gid));
+                  }}
                   onKeyDown={e => handleInputKeyDown(e)}>
                   {groups.map(g => <option key={g.Id} value={g.Id}>{g.Icon} {g.Name}</option>)}
                 </select>
@@ -468,16 +563,18 @@ export default function VocabularyPage() {
                   onKeyDown={e => handleInputKeyDown(e, true)}
                   placeholder="Cô ấy đã hoàn thành tất cả mục tiêu năm nay." rows={2} />
               </div>
-              {!editWord && form.english && form.vietnamese && form.groupId && (
+              {!editWord && form.english && form.groupId && (
                 <div style={{ fontSize: 12, color: '#10b981', padding: '4px 0' }}>
-                  ⏎ Enter để lưu nhanh và tiếp tục nhập từ mới
+                  {form.vietnamese
+                    ? '⏎ Enter để lưu nhanh và tiếp tục nhập từ mới'
+                    : '⏎ Enter để lưu — AI sẽ tự điền nghĩa cho bạn'}
                 </div>
               )}
             </div>
             <div className="modal-footer">
               <button tabIndex={9} className="btn btn-secondary" onClick={tryCloseModal}>Hủy</button>
-              <button tabIndex={8} className="btn btn-primary" onClick={() => handleSave()} disabled={saving || !form.english || !form.vietnamese || !form.groupId}>
-                {saving ? '⏳ Đang lưu...' : editWord ? '💾 Cập Nhật' : '➕ Thêm Từ'}
+              <button tabIndex={8} className="btn btn-primary" onClick={() => handleSave()} disabled={saving || !form.english || !form.groupId}>
+                {saving ? '🪄 AI đang tra từ...' : editWord ? '💾 Cập Nhật' : '➕ Thêm Từ'}
               </button>
             </div>
           </div>
@@ -495,6 +592,23 @@ export default function VocabularyPage() {
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setDeleteConfirm(null)}>Hủy</button>
               <button className="btn btn-danger" onClick={() => handleDelete(deleteConfirm)}>Xóa</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Close confirm dialog (replaces window.confirm to avoid Electron focus bug) */}
+      {showCloseConfirm && (
+        <div className="modal-overlay" onClick={() => setShowCloseConfirm(false)}>
+          <div className="modal" style={{ maxWidth: 360 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-body" style={{ textAlign: 'center', gap: 16 }}>
+              <div style={{ fontSize: 48 }}>⚠️</div>
+              <h3>Hủy bỏ thay đổi?</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Bạn có thay đổi chưa lưu. Bạn muốn hủy bỏ?</p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setShowCloseConfirm(false)}>Tiếp tục chỉnh sửa</button>
+              <button className="btn btn-danger" onClick={confirmCloseModal}>Hủy bỏ</button>
             </div>
           </div>
         </div>

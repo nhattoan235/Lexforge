@@ -168,4 +168,77 @@ Keep the response strictly as valid JSON, with NO markdown block formatting (\`\
       return { success: false, error: err.message || 'Lỗi không xác định.' };
     }
   },
+
+  /**
+   * Tra cứu nghĩa của một từ tiếng Anh bằng AI (Groq API).
+   * Trả về nghĩa tiếng Việt phổ biến, phát âm IPA, từ loại, ví dụ.
+   */
+  lookupWord: async (english: string): Promise<{
+    vietnamese: string;
+    pronunciation: string;
+    partOfSpeech: string;
+    example: string;
+    exampleVi: string;
+  }> => {
+    const keyRes = await db.getSetting('groq_api_key');
+    const apiKey = keyRes.success && keyRes.data?.[0]?.SettingValue;
+
+    if (!apiKey || apiKey.trim() === '') {
+      throw new Error('NO_KEY');
+    }
+
+    const systemPrompt = `You are an expert English-Vietnamese dictionary.
+Given an English word or phrase, provide:
+- vietnamese: 1–2 most common Vietnamese meanings, separated by comma
+- pronunciation: IPA pronunciation (e.g. /əˈkɒmplɪʃ/)
+- partOfSpeech: the part of speech in English (e.g. noun, verb, adjective, phrase)
+- example: a clear, short example sentence in English using this word
+- exampleVi: natural Vietnamese translation of the example sentence
+
+Return ONLY a valid JSON object with exactly these 5 keys. No markdown, no introduction, no extra text.`;
+
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey.trim()}`,
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Look up: ${english}` },
+        ],
+        temperature: 0.3,
+        response_format: { type: 'json_object' },
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('Groq Lookup Error:', response.status, errText);
+      throw new Error(`HTTP_${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+
+    if (!content) {
+      throw new Error('EMPTY_RESPONSE');
+    }
+
+    try {
+      const parsed = JSON.parse(content);
+      return {
+        vietnamese: parsed.vietnamese || '',
+        pronunciation: parsed.pronunciation || '',
+        partOfSpeech: parsed.partOfSpeech || '',
+        example: parsed.example || '',
+        exampleVi: parsed.exampleVi || '',
+      };
+    } catch (e) {
+      console.error('Failed to parse lookup response JSON:', content);
+      throw new Error('JSON_PARSE_ERROR');
+    }
+  },
 };
