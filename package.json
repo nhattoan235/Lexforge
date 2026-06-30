@@ -1,0 +1,75 @@
+{
+  "name": "toeic-vocab-master",
+  "version": "1.0.0",
+  "description": "TOEIC Vocabulary Learning App",
+  "main": "electron/main.js",
+  "author": "YourName",
+  "homepage": "./",
+  "scripts": {
+    "start": "cross-env NODE_OPTIONS=--max-old-space-size=4096 react-scripts start",
+    "build": "cross-env NODE_OPTIONS=--max-old-space-size=4096 react-scripts build",
+    "electron": "electron .",
+    "electron-dev": "concurrently \"cross-env BROWSER=none npm start\" \"wait-on --timeout 300000 --interval 1000 http://localhost:3000 && electron .\"",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win"
+  },
+  "build": {
+  "appId": "com.toeic.vocabmaster",
+  "productName": "TOEIC Vocab Master",
+  "extends": null,
+  "extraMetadata": {
+    "main": "electron/main.js"
+  },
+  "directories": {
+    "output": "dist"
+  },
+  "files": [
+    "build/**/*",
+    "electron/**/*",
+    "node_modules/**/*",
+    "package.json"
+  ],
+  "win": {
+    "target": "nsis"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true
+  }
+},
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.20.0",
+    "react-scripts": "5.0.1",
+    "recharts": "^2.9.0",
+    "react-hot-toast": "^2.4.1",
+    "framer-motion": "^10.16.4",
+    "lucide-react": "^0.292.0",
+    "xlsx": "^0.18.5",
+    "electron-store": "^8.1.0",
+    "socket.io-client": "^4.7.2",
+    "sql.js": "^1.10.3"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "concurrently": "^8.2.2",
+    "electron": "^27.1.2",
+    "electron-builder": "^24.6.4",
+    "wait-on": "^7.2.0",
+    "@types/react": "^18.2.37",
+    "@types/react-dom": "^18.2.15",
+    "typescript": "^4.9.5"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version"
+    ]
+  }
+}

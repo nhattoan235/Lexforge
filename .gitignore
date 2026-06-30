@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build/
+.env
+*.db
+game-server/node_modules/
+toeic-app/
+{src/
+src.zip
