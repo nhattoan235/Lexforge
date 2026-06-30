@@ -4,6 +4,7 @@ import { Page } from './types';
 import Sidebar from './components/Layout/Sidebar';
 import Dashboard from './pages/Dashboard';
 import FlashcardPage from './pages/FlashcardPage';
+import MP4ListeningPage from './pages/MP4ListeningPage';
 import TypingGamePage from './pages/TypingGamePage';
 import MonsterGamePage from './pages/MonsterGamePage';
 import ZombieGamePage from './pages/ZombieGamePage';
@@ -69,6 +70,7 @@ function App() {
     switch (currentPage) {
       case 'dashboard':    return <Dashboard />;
       case 'flashcard':    return <FlashcardPage />;
+      case 'mp4-listening': return <MP4ListeningPage />;
       case 'typing-game':  return <TypingGamePage />;
       case 'monster-game': return <MonsterGamePage />;
       case 'zombie-game':  return <ZombieGamePage />;
