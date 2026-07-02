@@ -9,6 +9,7 @@ const navItems: { id: Page; label: string; icon: string; section?: string }[] = 
   { id: 'groups', label: 'Nhóm Từ', icon: '📁' },
   { id: 'flashcard', label: 'Flashcard', icon: '🃏', section: 'ÔN LUYỆN' },
   { id: 'ai-coach', label: 'AI Coach', icon: '🤖' },
+  { id: 'mp4-listening', label: 'Học MP3', icon: '🎧' },
   { id: 'typing-game', label: 'Gõ Chữ Tốc Độ', icon: '⌨️' },
   { id: 'monster-game', label: 'Đánh Quái', icon: '⚔️' },
   { id: 'zombie-game', label: 'Zombie Survival', icon: '🧟' },
