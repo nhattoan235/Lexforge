@@ -194,11 +194,11 @@ export const db = {
     ),
 
   // ─── LSTM STUDY SESSIONS ───────────────────────────────────────────────
-  logStudySession: (wordId: number, groupId: number, correct: boolean, viewedCount: number, correctCount: number) =>
+  logStudySession: (wordId: number, groupId: number, correct: boolean, viewedCount: number, correctCount: number, mode: string = 'flashcard') =>
     dbService.query(
-      `INSERT INTO StudySessionsLSTM (WordId, GroupId, Correct, ViewedCount, CorrectCount, Timestamp)
-       VALUES (?, ?, ?, ?, ?, datetime('now'))`,
-      [{ value: wordId }, { value: groupId }, { value: correct ? 1 : 0 }, { value: viewedCount }, { value: correctCount }]
+      `INSERT INTO StudySessionsLSTM (WordId, GroupId, Correct, ViewedCount, CorrectCount, Mode, Timestamp)
+       VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [{ value: wordId }, { value: groupId }, { value: correct ? 1 : 0 }, { value: viewedCount }, { value: correctCount }, { value: mode }]
     ),
 
   getStudyHistory: (wordId: number, limit = 10) =>
@@ -304,11 +304,14 @@ export const computeOfflineSchedule = async (groupId?: number) => {
       // Recall rate from recent 5 sessions
       const recent = sessions.slice(0, 5);
       const recallRate = recent.reduce((s: number, r: any) => s + (r.Correct ? 1 : 0), 0) / recent.length;
+      const recentForget = 1 - recallRate;
 
-      // Forgetting curve: p_forget increases with time, decreases with recall
+      // Forgetting curve: p_forget increases with time and with low recall
       const stability = Math.max(0.1, recallRate); // 0.1 – 1.0
       const halfLife = stability * 7; // days until 50% forgotten
-      p_forget = Math.min(0.99, 1 - Math.exp(-0.693 * daysSinceLast / halfLife));
+      const timeForget = Math.min(0.99, 1 - Math.exp(-0.693 * daysSinceLast / halfLife));
+
+      p_forget = Math.min(0.99, Math.max(0.25, recentForget, timeForget));
 
       // Consecutive wrong streak penalty
       let streak = 0;

@@ -56,23 +56,29 @@ def _find_db() -> Path:
         appdata = os.environ.get('APPDATA', '')
         if appdata:
             candidates += [
+                Path(appdata) / 'toeic-vocab-master' / 'vocab.db',
                 Path(appdata) / 'toeic-vocab-master' / 'vocabapp.db',
                 Path(appdata) / 'toeic-vocab-master' / 'database.db',
+                Path(appdata) / 'TOEIC Vocab Master' / 'vocab.db',
                 Path(appdata) / 'TOEIC Vocab Master' / 'vocabapp.db',
+                Path(appdata) / 'TOEIC Vocab Master' / 'database.db',
             ]
     elif sys.platform == 'darwin':
         home = Path.home()
         candidates += [
+            home / 'Library' / 'Application Support' / 'toeic-vocab-master' / 'vocab.db',
             home / 'Library' / 'Application Support' / 'toeic-vocab-master' / 'vocabapp.db',
         ]
     else:
         home = Path.home()
         candidates += [
+            home / '.config' / 'toeic-vocab-master' / 'vocab.db',
             home / '.config' / 'toeic-vocab-master' / 'vocabapp.db',
         ]
 
     # 3. Check script dir fallback
     candidates += [
+        SCRIPT_DIR / 'vocab.db',
         SCRIPT_DIR / 'vocabapp.db',
         SCRIPT_DIR / 'database.db',
     ]

@@ -56,7 +56,7 @@ export default function FlashcardPage() {
     // Log to StudySessionsLSTM for AI scheduling
     const viewedCount = (word.TotalReviews || 0) + 1;
     const correctCount = (word.CorrectReviews || 0) + (correct ? 1 : 0);
-    await lstmService.logStudyResult(word.Id, word.GroupId, correct, viewedCount, correctCount);
+    await lstmService.logStudyResult(word.Id, word.GroupId, correct, viewedCount, correctCount, 'flashcard');
 
     const newResults = [...results, { word, correct }];
     setResults(newResults);

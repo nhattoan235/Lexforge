@@ -55,7 +55,7 @@ export interface AppStats {
   BestTypingScore: number;
 }
 
-export type Page = 'dashboard' | 'flashcard' | 'mp4-listening' | 'typing-game' | 'monster-game' | 'zombie-game' | 'memory-flip' | 'multiplayer' | 'progress' | 'groups' | 'vocabulary' | 'schedule' | 'settings' | 'help' | 'ai-coach';
+export type Page = 'dashboard' | 'flashcard' | 'quiz' | 'mp4-listening' | 'typing-game' | 'monster-game' | 'zombie-game' | 'memory-flip' | 'multiplayer' | 'progress' | 'groups' | 'vocabulary' | 'schedule' | 'settings' | 'help' | 'ai-coach';
 
 export const PART_OF_SPEECH = ['noun', 'verb', 'adjective', 'adverb', 'preposition', 'conjunction', 'pronoun', 'phrase'];
 
