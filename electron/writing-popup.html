@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hỗ trợ viết nhanh</title>
+    <link rel="stylesheet" href="writing-popup.css" />
+  </head>
+  <body>
+    <section class="popup" id="popup" aria-label="Hỗ trợ viết nhanh">
+      <div class="popup-top">
+        <span class="eyebrow">GỢI Ý VIẾT <span class="drag-hint">· Kéo ở đây để di chuyển</span></span>
+        <button class="close-button" id="dismiss" type="button" aria-label="Bỏ qua gợi ý" title="Bỏ qua">×</button>
+      </div>
+      <div class="label">Câu đề xuất</div>
+      <p class="suggestion" id="suggestion"></p>
+      <div class="action-row">
+        <button class="accept-button" id="accept" type="button" aria-label="Áp dụng câu đề xuất" title="Ctrl+Alt+1">✓ <span>Áp dụng</span></button>
+        <button class="dismiss-button" id="dismiss-secondary" type="button" aria-label="Bỏ qua gợi ý" title="Ctrl+Alt+2">× <span>Bỏ qua</span></button>
+        <button class="translate-toggle" id="translate-toggle" type="button" aria-expanded="false" title="Ctrl+Alt+3">Việt → Anh</button>
+      </div>
+      <p class="shortcut-hint">Bảng nhận phím khi xuất hiện. Esc đóng và trở về ô viết · Ctrl+Alt+1 áp dụng · 2 bỏ qua · 3 Việt → Anh · 4 dịch · 5 chèn</p>
+      <section class="vietnamese-panel" id="vietnamese-panel" hidden>
+        <label for="vietnamese-input">Nhập ý bằng tiếng Việt</label>
+        <textarea id="vietnamese-input" maxlength="300" placeholder="Nhập từ hoặc câu bạn muốn diễn đạt…"></textarea>
+        <button class="translate-button" id="translate" type="button" title="Ctrl+Alt+4">Dịch sang tiếng Anh <small>Ctrl+Alt+4</small></button>
+        <div class="translation-result" id="translation-result" hidden>
+          <div class="label">Câu tiếng Anh</div>
+          <p id="english-output"></p>
+          <button class="insert-button" id="insert" type="button" title="Ctrl+Alt+5">✓ Chèn vào nơi đang viết <small>Ctrl+Alt+5</small></button>
+        </div>
+      </section>
+      <p class="error" id="error" role="status" hidden></p>
+    </section>
+    <script src="writing-popup.js"></script>
+  </body>
+</html>

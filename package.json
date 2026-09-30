@@ -1,44 +1,77 @@
 {
   "name": "toeic-vocab-master",
   "version": "1.0.0",
-  "description": "TOEIC Vocabulary Learning App",
+  "description": "Ứng dụng học từ vựng TOEIC kèm trợ lý tiếng Anh trên desktop",
   "main": "electron/main.js",
-  "author": "YourName",
+  "author": "Lexforge",
   "homepage": "./",
   "scripts": {
     "start": "cross-env NODE_OPTIONS=--max-old-space-size=4096 react-scripts start",
     "build": "cross-env NODE_OPTIONS=--max-old-space-size=4096 react-scripts build",
     "electron": "electron .",
-    "electron-dev": "concurrently \"cross-env BROWSER=none npm start\" \"wait-on --timeout 300000 --interval 1000 http://localhost:3000 && electron .\"",
-    "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder",
-    "dist:win": "npm run build && electron-builder --win"
+    "build:selection-monitor:dev": "cross-env APPDATA=$INIT_CWD/.nuget-home dotnet restore electron/selection-monitor/Lexforge.SelectionMonitor.csproj --configfile electron/selection-monitor/NuGet.Config && cross-env APPDATA=$INIT_CWD/.nuget-home dotnet build electron/selection-monitor/Lexforge.SelectionMonitor.csproj --configuration Release --no-restore",
+    "build:selection-monitor": "cross-env APPDATA=$INIT_CWD/.nuget-home NUGET_PACKAGES=$INIT_CWD/.nuget-home/packages dotnet restore electron/selection-monitor/Lexforge.SelectionMonitor.csproj --runtime win-x64 --source https://api.nuget.org/v3/index.json --configfile electron/selection-monitor/NuGet.Config -p:RuntimeFrameworkVersion=10.0.10 && cross-env APPDATA=$INIT_CWD/.nuget-home NUGET_PACKAGES=$INIT_CWD/.nuget-home/packages dotnet publish electron/selection-monitor/Lexforge.SelectionMonitor.csproj --configuration Release --runtime win-x64 --self-contained true -p:RuntimeFrameworkVersion=10.0.10 -p:PublishSingleFile=true -p:DebugType=None --no-restore --output electron/selection-monitor/publish",
+    "electron-dev": "npm run build:selection-monitor:dev && concurrently \"cross-env BROWSER=none npm start\" \"wait-on --timeout 300000 --interval 1000 http://localhost:3000 && electron .\"",
+    "pack": "npm run build && npm run build:selection-monitor && electron-builder --dir",
+    "dist": "npm run build && npm run build:selection-monitor && electron-builder",
+    "dist:win": "npm run build && npm run build:selection-monitor && electron-builder --win"
   },
   "build": {
-  "appId": "com.toeic.vocabmaster",
-  "productName": "TOEIC Vocab Master",
-  "extends": null,
-  "extraMetadata": {
-    "main": "electron/main.js"
+    "appId": "com.toeic.vocabmaster",
+    "productName": "TOEIC Vocab Master",
+    "extends": null,
+    "electronDist": "node_modules/electron/dist",
+    "extraMetadata": {
+      "main": "electron/main.js"
+    },
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "build/**/*",
+      "electron/main.js",
+      "electron/startup.html",
+      "electron/preload.js",
+      "electron/assistant-widget.html",
+      "electron/assistant-widget.css",
+      "electron/assistant-widget.js",
+      "electron/assistant-widget-preload.js",
+      "electron/selection-preview.html",
+      "electron/selection-preview.css",
+      "electron/selection-preview.js",
+      "electron/selection-preview-preload.js",
+      "electron/writing-popup.html",
+      "electron/writing-popup.css",
+      "electron/writing-popup.js",
+      "electron/writing-popup-preload.js",
+      "public/lexforge-mark.svg",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "electron/selection-monitor/publish",
+        "to": "selection-monitor"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "public/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "TOEIC Vocab Master",
+      "installerIcon": "public/icon.ico",
+      "uninstallerIcon": "public/icon.ico",
+      "runAfterFinish": true
+    }
   },
-  "directories": {
-    "output": "dist"
-  },
-  "files": [
-    "build/**/*",
-    "electron/**/*",
-    "node_modules/**/*",
-    "package.json"
-  ],
-  "win": {
-    "target": "nsis"
-  },
-  "nsis": {
-    "oneClick": false,
-    "allowToChangeInstallationDirectory": true
-  }
-},
   "dependencies": {
+    "sql.js": "^1.10.3"
+  },
+  "devDependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.20.0",
@@ -50,9 +83,6 @@
     "xlsx": "^0.18.5",
     "electron-store": "^8.1.0",
     "socket.io-client": "^4.7.2",
-    "sql.js": "^1.10.3"
-  },
-  "devDependencies": {
     "cross-env": "^7.0.3",
     "concurrently": "^8.2.2",
     "electron": "^27.1.2",

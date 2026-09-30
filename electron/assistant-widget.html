@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>Trợ lý tiếng Anh</title>
+    <link rel="stylesheet" href="assistant-widget.css" />
+  </head>
+  <body>
+    <main id="assistant-shell" aria-label="Trợ lý tiếng Anh">
+      <div class="launcher-stage" id="launcher-stage">
+        <button class="launcher" id="launcher" type="button" aria-label="Mở trợ lý tiếng Anh" title="Kéo để di chuyển · bấm để mở">
+          <img class="launcher-symbol" src="../public/lexforge-mark.svg" alt="" draggable="false" />
+          <span class="launcher-state" id="launcher-state" aria-hidden="true"></span>
+        </button>
+      </div>
+
+      <section class="assistant-panel" id="assistant-panel" aria-hidden="true" hidden>
+        <header class="panel-header">
+          <div class="brand-lockup">
+            <span class="brand-mark" aria-hidden="true">
+              <img src="../public/lexforge-mark.svg" alt="" draggable="false" />
+            </span>
+            <span>
+              <strong>Trợ lý tiếng Anh</strong>
+              <small>Lexforge</small>
+            </span>
+          </div>
+          <div class="header-controls">
+            <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Chuyển sang giao diện sáng" title="Chuyển sang giao diện sáng">
+              <span class="theme-symbol" id="theme-symbol" aria-hidden="true">☀</span>
+              <span id="theme-label">Sáng</span>
+            </button>
+            <button class="icon-button header-close" id="collapse" type="button" aria-label="Thu gọn trợ lý" title="Thu gọn">−</button>
+          </div>
+        </header>
+
+        <div class="panel-content">
+          <section class="status-card" id="status-card">
+            <div class="status-main">
+              <div class="status-heading">
+                <span class="status-indicator" id="status-indicator"></span>
+                <span class="status-label" id="status-label">Đang tải trạng thái…</span>
+              </div>
+              <button class="switch" id="enabled-toggle" type="button" role="switch" aria-checked="true" aria-label="Bật hoặc tắt trợ lý">
+                <span class="switch-knob"></span>
+              </button>
+            </div>
+            <p id="status-copy">Đang đọc cài đặt trợ lý trên máy này.</p>
+          </section>
+
+          <section class="writing-composer" id="writing-composer" aria-label="Dịch và hỗ trợ viết">
+            <div class="composer-heading">
+              <div>
+                <span class="eyebrow">CÔNG CỤ AI</span>
+                <h2>Dịch &amp; hỗ trợ viết</h2>
+                <p>Chọn việc cần làm, nhập nội dung và nhận gợi ý ngay.</p>
+              </div>
+            </div>
+
+            <div class="field-label" id="task-choice-label">Bạn cần làm gì?</div>
+            <div class="task-choices" role="group" aria-labelledby="task-choice-label">
+              <button class="task-choice" type="button" data-task="translate" aria-pressed="true">Dịch</button>
+              <button class="task-choice" type="button" data-task="grammar" aria-pressed="false">Sửa ngữ pháp</button>
+              <button class="task-choice" type="button" data-task="complete" aria-pressed="false">Hoàn chỉnh câu</button>
+              <button class="task-choice" type="button" data-task="write" aria-pressed="false">Viết từ tiếng Việt</button>
+            </div>
+            <select id="writing-task" hidden aria-hidden="true" tabindex="-1">
+              <option value="translate">Dịch từ hoặc câu</option>
+              <option value="grammar">Kiểm tra &amp; sửa ngữ pháp</option>
+              <option value="complete">Hoàn chỉnh câu</option>
+              <option value="write">Viết câu tiếng Anh từ ý tiếng Việt</option>
+            </select>
+
+            <p class="task-help" id="task-help">Nhập một từ, câu hoặc đoạn văn cần dịch.</p>
+
+            <details class="direction-options" id="direction-options">
+              <summary>Chiều dịch: <strong id="direction-summary">Tự nhận diện Anh ↔ Việt</strong><span class="direction-chevron" aria-hidden="true">⌄</span></summary>
+              <label class="field-label" for="translation-direction">Chọn chiều dịch</label>
+              <select class="field-control direction-select" id="translation-direction">
+                <option value="auto">Tự nhận diện ngôn ngữ</option>
+                <option value="en-vi">Tiếng Anh → tiếng Việt</option>
+                <option value="vi-en">Tiếng Việt → tiếng Anh</option>
+              </select>
+            </details>
+
+            <label class="field-label" for="writing-input">Nội dung</label>
+            <textarea class="field-control writing-input" id="writing-input" maxlength="5000" placeholder="Nhập hoặc dán nội dung vào đây…"></textarea>
+            <div class="composer-bottom-row">
+              <span class="character-count" id="character-count">0 / 5000</span>
+              <button class="action-button primary-action submit-writing" id="submit-writing" type="button">Thực hiện</button>
+            </div>
+            <p class="composer-error" id="composer-error" role="status" hidden></p>
+          </section>
+
+          <section class="translation-view" id="translation-view" hidden aria-live="polite">
+            <div class="translation-heading">
+              <div>
+                <span class="eyebrow">TRỢ LÝ TIẾNG ANH</span>
+                <h2 id="result-title">Kết quả</h2>
+              </div>
+              <span class="translation-status" id="translation-status">Đang dịch…</span>
+            </div>
+            <div class="translation-original-label" id="original-label">Nội dung gốc</div>
+            <div class="translation-original" id="translation-original"></div>
+            <div class="translation-output-label" id="output-label">Đề xuất</div>
+            <div class="translation-output" id="translation-output"></div>
+            <section class="result-detail" id="result-explanation" hidden>
+              <div class="translation-output-label">Giải thích</div>
+              <div class="detail-copy" id="explanation-copy"></div>
+            </section>
+            <section class="result-detail" id="result-suggestions" hidden>
+              <div class="translation-output-label">Cách diễn đạt khác</div>
+              <ul class="detail-list" id="suggestions-list"></ul>
+            </section>
+            <section class="result-detail" id="result-vocabulary" hidden>
+              <div class="translation-output-label">Từ và cụm từ hữu ích</div>
+              <ul class="detail-list vocabulary-list" id="vocabulary-list"></ul>
+            </section>
+            <div class="translation-error" id="translation-error" hidden></div>
+            <div class="translation-actions">
+              <button class="action-button primary-action" id="copy-translation" type="button" hidden>Sao chép kết quả</button>
+              <button class="action-button quiet-action" id="back-to-controls" type="button">Quay lại công cụ</button>
+            </div>
+            <div class="translation-copied" id="translation-copied" role="status" hidden>Đã sao chép vào clipboard.</div>
+          </section>
+
+          <div class="panel-actions">
+            <button class="action-button primary-action" id="open-main" type="button">
+              <span class="action-icon" aria-hidden="true">▦</span>
+              <span>Mở TOEIC Vocab Master</span>
+              <span class="action-arrow" aria-hidden="true">↗</span>
+            </button>
+            <button class="action-button quiet-action" id="quit" type="button">
+              <span class="action-icon" aria-hidden="true">⏻</span>
+              <span>Thoát Lexforge</span>
+            </button>
+          </div>
+
+          <p class="error-message" id="error-message" role="status" hidden></p>
+          <footer class="panel-footer">
+            <span>Groq · xử lý khi bạn chủ động dùng</span>
+            <span id="version-label"></span>
+          </footer>
+        </div>
+      </section>
+    </main>
+    <script src="assistant-widget.js"></script>
+  </body>
+</html>

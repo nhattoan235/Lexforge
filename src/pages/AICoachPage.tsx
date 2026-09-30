@@ -150,7 +150,7 @@ export default function AICoachPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey.trim()}` },
           body: JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
+            model: 'openai/gpt-oss-120b',
             messages: [
               { role: 'system', content: 'You are a grammar checker. Return ONLY a JSON object: {"hasError":boolean,"correctedText":"corrected if error else empty","explanation":"brief Vietnamese explanation if error else empty"}. No markdown, no extra text.' },
               { role: 'user', content: input.trim() }
@@ -459,7 +459,7 @@ export default function AICoachPage() {
         'Authorization': `Bearer ${freshKey.trim()}`
       },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile', // Dòng model thông minh và có tốc độ tối ưu cao của Groq
+        model: 'openai/gpt-oss-120b',
         messages: groqMessages,
         temperature: 0.8,
         max_tokens: 300,

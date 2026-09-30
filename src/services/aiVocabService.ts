@@ -87,7 +87,7 @@ Keep the response strictly as valid JSON, with NO markdown block formatting (\`\
         'Authorization': `Bearer ${apiKey.trim()}`,
       },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
+        model: 'openai/gpt-oss-120b',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `Generate 10 words for ${catLabel} - Topic: ${topic}` },
@@ -204,7 +204,7 @@ Return ONLY a valid JSON object with exactly these 5 keys. No markdown, no intro
         'Authorization': `Bearer ${apiKey.trim()}`,
       },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
+        model: 'openai/gpt-oss-120b',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `Look up: ${english}` },
