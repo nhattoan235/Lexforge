@@ -122,6 +122,7 @@ export default function SchedulePage() {
   const [filter, setFilter] = useState<FilterType>('all');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [forceOffline, setForceOffline] = useState(false);
 
   useEffect(() => {
     db.getGroups().then(res => {
@@ -137,7 +138,9 @@ export default function SchedulePage() {
     if (!silent) setIsLoading(true);
     else setIsRefreshing(true);
     try {
-      const result = await lstmService.getDailySchedule(selectedGroupId ?? undefined);
+      const result = forceOffline
+        ? await lstmService.getOfflineSchedule(selectedGroupId ?? undefined)
+        : await lstmService.getDailySchedule(selectedGroupId ?? undefined);
       setSchedule(result);
       setLastUpdated(new Date());
       setLstmStatus(result.source === 'lstm' ? 'online' : 'offline');
@@ -145,11 +148,11 @@ export default function SchedulePage() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [selectedGroupId]);
+  }, [selectedGroupId, forceOffline]);
 
   useEffect(() => {
     if (selectedGroupId !== null) loadSchedule();
-  }, [selectedGroupId]); // eslint-disable-line
+  }, [selectedGroupId, forceOffline]); // eslint-disable-line
 
   const filteredWords = (() => {
     if (!schedule) return [];
@@ -262,6 +265,13 @@ export default function SchedulePage() {
           >
             {isRefreshing ? '⏳ Đang tính...' : '🔄 Tính lại'}
           </button>
+          <button
+            className={`btn ${forceOffline ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setForceOffline(f => !f)}
+            style={{ minWidth: 150, borderColor: forceOffline ? '#6366f1' : undefined }}
+          >
+            {forceOffline ? '🔒 Dùng SM-2 cục bộ' : '🌐 Dùng LSTM nếu có'}
+          </button>
         </div>
       </div>
 
@@ -275,12 +285,14 @@ export default function SchedulePage() {
           border: `1px solid ${lstmStatus === 'online' ? 'rgba(16,185,129,0.25)' : 'rgba(249,115,22,0.25)'}`,
           fontSize: 12, color: 'var(--text-secondary)',
         }}>
-          <span style={{ fontWeight: 600, color: lstmStatus === 'online' ? '#10b981' : '#f97316' }}>
-            {lstmStatus === 'checking' ? '⏳ Đang kiểm tra...'
-              : lstmStatus === 'online' ? '✅ LSTM Server đang chạy'
-                : '⚠️ LSTM Offline — đang dùng SM-2 cục bộ'}
+          <span style={{ fontWeight: 600, color: forceOffline ? '#6366f1' : lstmStatus === 'online' ? '#10b981' : '#f97316' }}>
+            {forceOffline
+              ? '🔒 Đang dùng SM-2 cục bộ (không dùng LSTM)'
+              : lstmStatus === 'checking' ? '⏳ Đang kiểm tra...'
+                : lstmStatus === 'online' ? '✅ LSTM Server đang chạy'
+                  : '⚠️ LSTM Offline — đang dùng SM-2 cục bộ'}
           </span>
-          {lstmStatus === 'offline' && (
+          {!forceOffline && lstmStatus === 'offline' && (
             <span style={{ color: 'var(--text-muted)' }}>
               Để bật LSTM: <code style={{ background: 'rgba(255,255,255,0.05)', padding: '1px 6px', borderRadius: 4 }}>python lstm_scheduler.py</code>
             </span>

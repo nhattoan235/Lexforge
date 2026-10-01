@@ -1367,11 +1367,35 @@ async function initDatabase() {
 
   db.run(`PRAGMA foreign_keys = ON;`);
   createTables();
+  migrateSchema();
   saveDb(); // Save initial state
   console.log('✅ sql.js DB initialized at:', DB_PATH);
 
   // Auto-save every 30 seconds
   setInterval(saveDb, 30000);
+}
+
+function migrateSchema() {
+  try {
+    const res = db.exec("PRAGMA table_info('StudySessionsLSTM');");
+    const columns = res.length > 0 ? res[0].values.map(row => row[1]) : [];
+    if (columns.length === 0) {
+      db.run(`CREATE TABLE IF NOT EXISTS StudySessionsLSTM (
+        Id INTEGER PRIMARY KEY AUTOINCREMENT,
+        WordId INTEGER REFERENCES Words(Id) ON DELETE CASCADE,
+        GroupId INTEGER REFERENCES WordGroups(Id) ON DELETE SET NULL,
+        Correct INTEGER DEFAULT 0,
+        ViewedCount INTEGER DEFAULT 0,
+        CorrectCount INTEGER DEFAULT 0,
+        Mode TEXT DEFAULT 'flashcard',
+        Timestamp TEXT DEFAULT (datetime('now'))
+      );`);
+    } else if (!columns.includes('Mode')) {
+      db.run(`ALTER TABLE StudySessionsLSTM ADD COLUMN Mode TEXT DEFAULT 'flashcard';`);
+    }
+  } catch (err) {
+    console.warn('Schema migration error:', err.message);
+  }
 }
 
 function saveDb() {
@@ -1410,6 +1434,16 @@ function createTables() {
       CorrectReviews INTEGER DEFAULT 0,
       CreatedAt TEXT DEFAULT (datetime('now')),
       UpdatedAt TEXT DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS StudySessionsLSTM (
+      Id INTEGER PRIMARY KEY AUTOINCREMENT,
+      WordId INTEGER REFERENCES Words(Id) ON DELETE CASCADE,
+      GroupId INTEGER REFERENCES WordGroups(Id) ON DELETE SET NULL,
+      Correct INTEGER DEFAULT 0,
+      ViewedCount INTEGER DEFAULT 0,
+      CorrectCount INTEGER DEFAULT 0,
+      Mode TEXT DEFAULT 'flashcard',
+      Timestamp TEXT DEFAULT (datetime('now'))
     );
     CREATE TABLE IF NOT EXISTS StudySessions (
       Id INTEGER PRIMARY KEY AUTOINCREMENT,

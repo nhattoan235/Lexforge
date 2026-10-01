@@ -81,7 +81,7 @@ export default function TypingGamePage() {
     }
   };
 
-  const checkAnswer = useCallback(() => {
+  const checkAnswer = useCallback(async () => {
     if (!words[current]) return;
     const word = words[current];
     const answer = input.trim().toLowerCase();
@@ -107,6 +107,10 @@ export default function TypingGamePage() {
       setWrongAnim(true);
       setTimeout(() => setWrongAnim(false), 500);
     }
+
+    const viewedCount = (word.TotalReviews || 0) + 1;
+    const correctCount = (word.CorrectReviews || 0) + (isCorrect ? 1 : 0);
+    await db.logStudySession(word.Id, word.GroupId, isCorrect, viewedCount, correctCount, 'typing');
 
     setInput('');
     const next = current + 1;

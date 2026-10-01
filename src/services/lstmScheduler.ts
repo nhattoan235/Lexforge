@@ -147,9 +147,10 @@ export const lstmService = {
     correct: boolean,
     viewedCount: number,
     correctCount: number,
+    mode: string = 'flashcard',
   ): Promise<void> => {
     try {
-      await db.logStudySession(wordId, groupId, correct, viewedCount, correctCount);
+      await db.logStudySession(wordId, groupId, correct, viewedCount, correctCount, mode);
     } catch (e) {
       console.error('logStudyResult error:', e);
     }

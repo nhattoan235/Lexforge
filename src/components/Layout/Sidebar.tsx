@@ -8,6 +8,7 @@ const navItems: { id: Page; label: string; icon: string; section?: string }[] = 
   { id: 'vocabulary', label: 'Từ Vựng', icon: '📖' },
   { id: 'groups', label: 'Nhóm Từ', icon: '📁' },
   { id: 'flashcard', label: 'Flashcard', icon: '🃏', section: 'ÔN LUYỆN' },
+  { id: 'quiz', label: 'Trắc Nghiệm', icon: '📝' },
   { id: 'ai-coach', label: 'AI Coach', icon: '🤖' },
   { id: 'mp4-listening', label: 'Học MP3', icon: '🎧' },
   { id: 'typing-game', label: 'Gõ Chữ Tốc Độ', icon: '⌨️' },
