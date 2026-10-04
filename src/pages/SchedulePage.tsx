@@ -27,17 +27,14 @@ export default function SchedulePage() {
   const [openWord, setOpenWord] = useState<ScheduledWord | null>(null);
   const [flipped, setFlipped] = useState(false);
   const [confirmGroup, setConfirmGroup] = useState(false);
-  const [forceOffline, setForceOffline] = useState(false);
 
   useEffect(() => { db.getGroups().then(result => { if (result.success) setGroups(result.data || []); }); }, []);
   const load = useCallback(async (quiet = false) => {
     quiet ? setRefreshing(true) : setLoading(true);
-    try { setSchedule(forceOffline
-      ? await lstmService.getOfflineSchedule(groupId ?? undefined)
-      : await lstmService.getDailySchedule(groupId ?? undefined)); }
+    try { setSchedule(await lstmService.getDailySchedule(groupId ?? undefined)); }
     catch (error) { console.error('Không tải được lịch ôn:', error); setSchedule(null); }
     finally { setLoading(false); setRefreshing(false); }
-  }, [groupId, forceOffline]);
+  }, [groupId]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setPageNumber(1); }, [groupId, priority, appliedQuery]);
   useEffect(() => { if (!openWord) return; const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpenWord(null); }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [openWord]);
@@ -77,11 +74,6 @@ export default function SchedulePage() {
   return <div className="schedule-approved">
     <div className="sa-topbar"><strong>Lịch ôn tập AI</strong><span>Chọn đúng từ · Ôn đúng lúc</span></div>
     <div className="sa-content">
-      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '12px 0' }}>
-        <button type="button" onClick={() => setForceOffline(value => !value)} aria-pressed={forceOffline}>
-          {forceOffline ? 'Đang dùng SM-2 cục bộ · Chuyển sang LSTM' : 'Đang dùng LSTM nếu có · Chuyển sang SM-2 cục bộ'}
-        </button>
-      </div>
       <section className="sa-hero"><div className="sa-hero-copy"><span className="sa-eyebrow"><i /> LỊCH ÔN HÔM NAY</span><h1>Giữ từ trong trí nhớ.<br /><em>Ôn đúng thời điểm.</em></h1><p>Từ nào dễ quên được đưa lên trước để bạn dành thời gian đúng chỗ.</p><div className="sa-hero-meta"><span><Clock3 size={16} /> Lịch được tính từ lịch sử học</span><span><ArrowUpRight size={16} /> Có thể tìm lại bất cứ lúc nào</span></div></div><div className="sa-hero-art" aria-hidden="true"><div className="sa-art-orbit one" /><div className="sa-art-orbit two" /><div className="sa-art-core"><span>HÔM NAY</span><strong>{String(urgentCount).padStart(2, '0')}</strong><small>TỪ CẤP TỐC</small></div><span className="sa-art-word a">deadline <b>!</b></span><span className="sa-art-word b">negotiate <b>↗</b></span><span className="sa-art-star">✦</span></div><div className="sa-hero-action"><small>NÊN BẮT ĐẦU TỪ ĐÂY</small><div className="sa-action-number">{urgentCount} <span>từ</span></div><strong>cần ôn cấp tốc</strong><i /><p>Ôn nhóm dễ quên trước, rồi tiếp tục các từ còn lại.</p><button onClick={() => { sessionStorage.setItem('lexforge-flashcard-intent', 'due'); setPage('flashcard'); }}>Bắt đầu ôn <ArrowUpRight size={17} /></button></div></section>
       <section className="sa-summary" aria-label="Tóm tắt lịch ôn">{[
         ['urgent', '01 · CẦN HÀNH ĐỘNG', urgentCount, '!', 'Cấp tốc', 'Ôn ngay hôm nay'],

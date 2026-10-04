@@ -85,14 +85,11 @@ function transitionToMainWindow() {
   if (!mainWindow || mainWindow.isDestroyed() || mainWindowRevealed) return;
   mainWindowRevealed = true;
   const splash = startupWindow && !startupWindow.isDestroyed() ? startupWindow : null;
-  // Prepare the maximized window behind the always-on-top splash first.
-  mainWindow.showInactive();
-  mainWindow.maximize();
-  setTimeout(() => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    if (splash && !splash.isDestroyed()) splash.close();
-    mainWindow.focus();
-  }, 250);
+  // Size the hidden renderer without a visible Windows maximize animation.
+  mainWindow.setBounds(screen.getPrimaryDisplay().workArea, false);
+  mainWindow.show();
+  if (splash && !splash.isDestroyed()) splash.close();
+  mainWindow.focus();
 }
 
 function createWindow() {
@@ -128,10 +125,13 @@ function createWindow() {
     ipcMain.removeListener('lexforge-ui-ready', onUiReady);
   };
   ipcMain.on('lexforge-ui-ready', onUiReady);
-  mainWindow.webContents.once('did-fail-load', () => {
-    loaded = true;
-    uiReady = true;
-    revealWhenReady();
+  mainWindow.webContents.on('did-fail-load', (_event, code, description, _url, isMainFrame) => {
+    if (!isMainFrame || !isDev || mainWindow?.isDestroyed()) return;
+    console.warn('Development UI is not ready yet:', code, description);
+    setTimeout(() => {
+      if (!appIsQuitting && mainWindow && !mainWindow.isDestroyed() && !loaded)
+        mainWindow.loadURL('http://localhost:3000').catch(() => {});
+    }, 1200);
   });
   const readinessFallback = setTimeout(() => {
     uiReady = true;
@@ -142,7 +142,7 @@ function createWindow() {
     ipcMain.removeListener('lexforge-ui-ready', onUiReady);
   });
   if (isDev) {
-    mainWindow.loadURL('http://localhost:3000');
+    mainWindow.loadURL('http://localhost:3000').catch(() => {});
     if (process.env.LEXFORGE_DEVTOOLS === '1') mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     mainWindow.loadFile(path.join(__dirname, '../build/index.html'));
@@ -170,15 +170,18 @@ function createStartupWindow() {
     webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
   });
   const splash = startupWindow;
+  let splashLoaded = false;
+  let splashPainted = false;
+  const showPaintedSplash = () => {
+    if (!splashLoaded || !splashPainted || splash.isDestroyed() || splash.isVisible()) return;
+    splash.show();
+    startupShownAt = Date.now();
+    resolveShown();
+  };
+  splash.once('ready-to-show', () => { splashPainted = true; showPaintedSplash(); });
   splash.loadFile(path.join(__dirname, 'startup.html')).then(() => {
-    if (splash.isDestroyed()) return;
-    // ready-to-show may fire before the splash HTML has painted on Windows.
-    setTimeout(() => {
-      if (splash.isDestroyed()) return;
-      splash.show();
-      startupShownAt = Date.now();
-      resolveShown();
-    }, 100);
+    splashLoaded = true;
+    showPaintedSplash();
   }).catch((error) => {
     console.error('Startup screen failed to load:', error);
     if (!splash.isDestroyed()) {
