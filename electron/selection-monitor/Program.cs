@@ -12,7 +12,7 @@ internal static class Program
 {
     private const int MaxTextLength = 4_000;
     private const int MaxAncestorDepth = 12;
-    private const int IdlePollIntervalMs = 240;
+    private const int IdlePollIntervalMs = 100;
     private const int SelectionGesturePollIntervalMs = 30;
     private const int VirtualKeyLeftMouseButton = 0x01;
     private const int VirtualKeyRightMouseButton = 0x02;
@@ -53,6 +53,7 @@ internal static class Program
         var missingCount = 0;
         var clearSent = true;
         var gestureWasActive = IsSelectionGestureActive();
+        var selectionReadScheduler = new InputReadScheduler(70, 700);
 
         while (true)
         {
@@ -67,6 +68,7 @@ internal static class Program
             gestureWasActive = gestureActive;
             if (gestureActive)
             {
+                selectionReadScheduler.Reset();
                 Thread.Sleep(SelectionGesturePollIntervalMs);
                 continue;
             }
@@ -74,6 +76,11 @@ internal static class Program
             try
             {
                 var foreground = GetForegroundWindow();
+                if (!selectionReadScheduler.ShouldRead(Environment.TickCount64, foreground, 0))
+                {
+                    Thread.Sleep(IdlePollIntervalMs);
+                    continue;
+                }
                 if (foreground == IntPtr.Zero)
                 {
                     ReportMissing(ref lastSignature, ref missingCount, ref clearSent);
@@ -118,11 +125,15 @@ internal static class Program
     private static void WatchClicks()
     {
         var wasDown = IsMouseButtonDown();
+        GetCursorPos(out var lastPoint);
         while (true)
         {
             var isDown = IsMouseButtonDown();
             if (isDown && !wasDown && GetCursorPos(out var point))
             {
+                lastPoint = point;
+                var target = WindowFromPoint(point);
+                var targetRoot = target == IntPtr.Zero ? IntPtr.Zero : GetAncestor(target, 3); // GA_ROOTOWNER
                 string? foregroundProcess = null;
                 var foreground = GetForegroundWindow();
                 if (foreground != IntPtr.Zero)
@@ -132,8 +143,20 @@ internal static class Program
                     catch { /* The foreground process can exit between calls. */ }
                 }
 
-                Console.WriteLine(JsonSerializer.Serialize(new ClickEvent("mouseDown", point.X, point.Y, foregroundProcess), JsonOptions));
+                Console.WriteLine(JsonSerializer.Serialize(new ClickEvent("mouseDown", point.X, point.Y,
+                    foregroundProcess, targetRoot == IntPtr.Zero ? null : targetRoot.ToInt64().ToString()), JsonOptions));
                 Console.Out.Flush();
+            }
+            else if (isDown && GetCursorPos(out point) &&
+                     (point.X != lastPoint.X || point.Y != lastPoint.Y))
+            {
+                lastPoint = point;
+                Emit(new ClickEvent("mouseMove", point.X, point.Y, null, null));
+            }
+            else if (!isDown && wasDown && GetCursorPos(out point))
+            {
+                lastPoint = point;
+                Emit(new ClickEvent("mouseUp", point.X, point.Y, null, null));
             }
 
             wasDown = isDown;
@@ -147,8 +170,6 @@ internal static class Program
 
     private static void WatchWriting()
     {
-        if (OleInitialize(IntPtr.Zero) < 0)
-            Console.Error.WriteLine("Writing monitor could not initialize OLE clipboard support.");
         var commands = new ConcurrentQueue<string>();
         var inputThread = new Thread(() =>
         {
@@ -161,6 +182,12 @@ internal static class Program
         string? lastText = null;
         DraftSnapshot? draft = null;
         var revision = 0;
+        // Wait for a full pause in typing before reading UI Automation or suggesting a correction.
+        var draftReadScheduler = new InputReadScheduler(700, 2000);
+        var previousInputTick = CurrentInputTick();
+        GetCursorPos(out var previousCursor);
+        var previousForeground = IntPtr.Zero;
+        var inputObservedInWindow = false;
         Emit(new MonitorEvent("writingReady"));
 
         while (true)
@@ -170,6 +197,18 @@ internal static class Program
             try
             {
                 var foreground = GetForegroundWindow();
+                if (foreground != previousForeground)
+                {
+                    previousForeground = foreground;
+                    inputObservedInWindow = false;
+                }
+                var inputTick = CurrentInputTick();
+                var inputChanged = inputTick != previousInputTick;
+                previousInputTick = inputTick;
+                var cursorMoved = GetCursorPos(out var cursor) &&
+                    (cursor.X != previousCursor.X || cursor.Y != previousCursor.Y);
+                previousCursor = cursor;
+                var shouldRead = draftReadScheduler.ShouldRead(Environment.TickCount64, foreground, inputTick);
                 GetWindowThreadProcessId(foreground, out var processId);
                 if (processId == ignoredProcessId || processId == (uint)Environment.ProcessId)
                 {
@@ -177,7 +216,18 @@ internal static class Program
                     continue;
                 }
 
-                if (IsMouseButtonDown())
+                if (inputChanged && !cursorMoved && !IsMouseButtonDown())
+                {
+                    inputObservedInWindow = true;
+                    if (sourceKey is not null)
+                    {
+                        Emit(new MonitorEvent("draftInput"));
+                        draft = null;
+                        lastText = null;
+                    }
+                }
+
+                if (IsMouseButtonDown() || !shouldRead)
                 {
                     Thread.Sleep(WritingPollIntervalMs);
                     continue;
@@ -193,18 +243,18 @@ internal static class Program
                 }
                 else if (current.SourceKey != sourceKey)
                 {
-                    var changedWithinWindow = draft is not null && current.Window == draft.Window && current.Text != lastText;
+                    var changedWithinWindow = draft is not null && current.Window == draft.Window;
                     if (sourceKey is not null && !changedWithinWindow) Emit(new MonitorEvent("draftClear"));
                     sourceKey = current.SourceKey;
                     lastText = current.Text;
-                    draft = changedWithinWindow && IsDraftEligible(current.Text)
+                    draft = (changedWithinWindow || inputObservedInWindow) && SentenceSegmenter.IsDraftEligible(current.Text, MaxDraftLength)
                         ? current with { Revision = ++revision } : null;
                     if (draft is not null) Emit(new WritingEvent("draft", draft.Revision, draft.Text, draft.Bounds));
                 }
                 else if (current.Text != lastText)
                 {
                     lastText = current.Text;
-                    draft = IsDraftEligible(current.Text) ? current with { Revision = ++revision } : null;
+                    draft = SentenceSegmenter.IsDraftEligible(current.Text, MaxDraftLength) ? current with { Revision = ++revision } : null;
                     if (draft is null) Emit(new MonitorEvent("draftClear"));
                     else Emit(new WritingEvent("draft", draft.Revision, draft.Text, draft.Bounds));
                 }
@@ -221,11 +271,6 @@ internal static class Program
         }
     }
 
-    private static bool IsDraftEligible(string text) =>
-        text.Length is >= 12 and <= MaxDraftLength &&
-        text.Count(char.IsLetter) >= 8 &&
-        text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length >= 4;
-
     private static DraftSnapshot? ReadDraft(IntPtr foreground)
     {
         if (foreground == IntPtr.Zero) return null;
@@ -233,7 +278,8 @@ internal static class Program
         for (var depth = 0; focused is not null && depth < MaxAncestorDepth; depth++)
         {
             var type = focused.Current.ControlType;
-            if ((type == ControlType.Edit || type == ControlType.Document) &&
+            if ((type == ControlType.Edit || type == ControlType.Document ||
+                 (type == ControlType.Custom && focused.Current.IsKeyboardFocusable)) &&
                 focused.Current.IsEnabled && !focused.Current.IsPassword &&
                 focused.TryGetCurrentPattern(TextPattern.Pattern, out var patternObject) &&
                 patternObject is TextPattern pattern)
@@ -242,19 +288,42 @@ internal static class Program
                 var selections = pattern.GetSelection();
                 if (selections.Length != 1 || !string.IsNullOrEmpty(selections[0].GetText(2))) return null;
 
-                var line = selections[0].Clone();
-                line.ExpandToEnclosingUnit(TextUnit.Line);
-                var text = line.GetText(MaxDraftLength + 10).Trim();
-                if (text.Length > MaxDraftLength || text.Contains('\n') || text.Contains('\r')) return null;
-                var exactRange = line.FindText(text, false, true);
-                if (exactRange is null || exactRange.GetText(MaxDraftLength + 1) != text) return null;
-                var rect = selections[0].GetBoundingRectangles().LastOrDefault(r => !r.IsEmpty && r.Width >= 0 && r.Height > 0);
+                // Read the logical paragraph around the caret, then keep only its active sentence.
+                // A visual UIA Line can contain several sentences or just part of one wrapped sentence.
+                var paragraph = selections[0].Clone();
+                paragraph.ExpandToEnclosingUnit(TextUnit.Paragraph);
+                var paragraphText = paragraph.GetText(MaxTextLength + 1);
+                if (paragraphText.Length > MaxTextLength) return null;
+                var beforeCaret = paragraph.Clone();
+                beforeCaret.MoveEndpointByRange(TextPatternRangeEndpoint.End,
+                    selections[0], TextPatternRangeEndpoint.Start);
+                var prefix = beforeCaret.GetText(MaxTextLength + 1);
+                if (!paragraphText.StartsWith(prefix, StringComparison.Ordinal)) return null;
+                var span = SentenceSegmenter.FindActiveSentence(paragraphText, prefix.Length);
+                if (span is null || span.Value.Length > MaxDraftLength) return null;
+                var text = paragraphText.Substring(span.Value.Start, span.Value.Length);
+                if (text.Contains('\n') || text.Contains('\r')) return null;
+
+                // Map the segment back to a provider range and verify it exactly before use.
+                var exactRange = paragraph.Clone();
+                exactRange.MoveEndpointByRange(TextPatternRangeEndpoint.End,
+                    paragraph, TextPatternRangeEndpoint.Start);
+                if (span.Value.Start > 0)
+                    exactRange.MoveEndpointByUnit(TextPatternRangeEndpoint.Start,
+                        TextUnit.Character, span.Value.Start);
+                exactRange.MoveEndpointByUnit(TextPatternRangeEndpoint.End,
+                    TextUnit.Character, span.Value.Length);
+                if (exactRange.GetText(MaxDraftLength + 1) != text) return null;
+                var rect = selections[0].GetBoundingRectangles().LastOrDefault(r => !r.IsEmpty && r.Height > 0);
                 if (rect.IsEmpty || rect.Height <= 0)
                     rect = exactRange.GetBoundingRectangles().LastOrDefault(r => !r.IsEmpty && r.Width > 0 && r.Height > 0);
                 if (rect.IsEmpty || rect.Height <= 0) return null;
+                var paragraphRect = paragraph.GetBoundingRectangles().FirstOrDefault(r => !r.IsEmpty);
                 var elementRect = focused.Current.BoundingRectangle;
-                var key = $"{foreground}:{type.Id}:{elementRect.Left:0}";
-                return new DraftSnapshot(0, key, text, new Bounds(rect.Left, rect.Top, Math.Max(rect.Width, 1), rect.Height), foreground, focused, exactRange, selections[0].Clone());
+                var key = $"{foreground}:{type.Id}:{elementRect.Left:0}:{paragraphRect.Top:0}:{span.Value.Start}";
+                return new DraftSnapshot(0, key, text,
+                    new Bounds(rect.Left, rect.Top, Math.Max(rect.Width, 1), rect.Height),
+                    foreground, focused, exactRange, selections[0].Clone());
             }
 
             focused = TreeWalker.ControlViewWalker.GetParent(focused);
@@ -323,7 +392,7 @@ internal static class Program
             var mode = root.GetProperty("mode").GetString();
             var replacement = root.GetProperty("text").GetString();
             if (draft is null || revision != draft.Revision ||
-                mode is not ("replace" or "insert") ||
+                mode is not ("replace" or "replaceTranslation") ||
                 string.IsNullOrWhiteSpace(replacement) || replacement.Length > 500 ||
                 !IsWindow(draft.Window) || draft.ExactRange.GetText(MaxDraftLength + 1) != draft.Text)
             {
@@ -331,6 +400,7 @@ internal static class Program
                 return;
             }
 
+            Console.Error.WriteLine("Writing apply phase: focus target");
             if (!TryPrepareDraftTarget(draft, out var currentPattern))
             {
                 Emit(new ApplyEvent("applyResult", revision, false, "Không thể chuyển về ô đang viết. Hãy thử lại."));
@@ -341,18 +411,9 @@ internal static class Program
                 Emit(new ApplyEvent("applyResult", revision, false, "Văn bản đã thay đổi. Hãy thử lại."));
                 return;
             }
-            if (mode == "insert")
+            if (mode is "replace" or "replaceTranslation")
             {
-                var currentSelection = currentPattern.GetSelection();
-                if (currentSelection.Length != 1 || !draft.CaretRange.Compare(currentSelection[0]))
-                {
-                    Emit(new ApplyEvent("applyResult", revision, false, "Vị trí con trỏ đã thay đổi. Hãy thử lại."));
-                    return;
-                }
-            }
-
-            if (mode == "replace")
-            {
+                Console.Error.WriteLine("Writing apply phase: select text");
                 var selected = false;
                 for (var attempt = 0; attempt < 3 && !selected; attempt++)
                 {
@@ -367,10 +428,20 @@ internal static class Program
                     return;
                 }
             }
-            else draft.CaretRange.Select();
-            var pasted = PasteAndVerify(draft, mode!, replacement);
-            Emit(new ApplyEvent("applyResult", revision, pasted,
-                pasted ? null : "Không xác nhận được câu sau khi dán. Hãy kiểm tra nội dung trong ô viết."));
+            Console.Error.WriteLine("Writing apply phase: type and verify");
+            var applied = TypeAndVerify(draft, replacement, out var applyError);
+            if (!applied)
+            {
+                try
+                {
+                    if (draft.ExactRange.GetText(MaxDraftLength + 1) == draft.Text)
+                        draft.CaretRange.Select();
+                }
+                catch (Exception error) when (error is InvalidOperationException or COMException)
+                { /* Keep the original content untouched if the editor changed. */ }
+            }
+            Emit(new ApplyEvent("applyResult", revision, applied,
+                applied ? null : applyError ?? "Không xác nhận được câu sau khi thay. Hãy kiểm tra nội dung trong ô viết."));
         }
         catch (Exception error)
         {
@@ -379,49 +450,52 @@ internal static class Program
         }
     }
 
-    private static bool PasteAndVerify(DraftSnapshot draft, string mode, string replacement)
+    private static bool TypeAndVerify(DraftSnapshot draft, string replacement, out string? failure)
     {
-        if (OleGetClipboard(out var previousClipboard) != 0) return false;
-        uint temporarySequence = 0;
-        try
+        failure = null;
+        // Send Unicode keystrokes instead of replacing the user's clipboard.
+        // This also works when the clipboard currently contains an image or file.
+        for (var wait = 0; wait < 25 &&
+            (GetAsyncKeyState(0x11) < 0 || GetAsyncKeyState(0x12) < 0 || GetAsyncKeyState(0x10) < 0); wait++)
+            Thread.Sleep(20);
+        if (GetAsyncKeyState(0x11) < 0 || GetAsyncKeyState(0x12) < 0 || GetAsyncKeyState(0x10) < 0)
         {
-            System.Windows.Clipboard.SetText(replacement);
-            temporarySequence = GetClipboardSequenceNumber();
-
-            for (var wait = 0; wait < 25 &&
-                (GetAsyncKeyState(0x11) < 0 || GetAsyncKeyState(0x12) < 0); wait++)
-                Thread.Sleep(20);
-            if (GetAsyncKeyState(0x11) < 0 || GetAsyncKeyState(0x12) < 0) return false;
-
-            var pasteKeys = new[]
-            {
-                KeyDown(0x11), KeyDown(0x56), KeyUp(0x56), KeyUp(0x11)
-            };
-            if (SendInput((uint)pasteKeys.Length, pasteKeys, Marshal.SizeOf<KeyboardInputEvent>()) != pasteKeys.Length)
-                return false;
-
-            for (var attempt = 0; attempt < 6; attempt++)
-            {
-                Thread.Sleep(100);
-                var applied = ReadDraft(draft.Window);
-                if (applied is not null && (mode == "replace"
-                    ? applied.Text == replacement
-                    : applied.Text.Contains(replacement, StringComparison.Ordinal))) return true;
-            }
+            failure = "Hãy nhả Ctrl, Alt và Shift rồi thử lại.";
             return false;
         }
-        finally
+        if (GetForegroundWindow() != draft.Window)
         {
-            if (temporarySequence != 0 && GetClipboardSequenceNumber() == temporarySequence)
-            {
-                for (var attempt = 0; attempt < 3; attempt++)
-                {
-                    if (OleSetClipboard(previousClipboard) == 0) break;
-                    Thread.Sleep(35);
-                }
-            }
-            if (previousClipboard != IntPtr.Zero) Marshal.Release(previousClipboard);
+            failure = "Ô viết mất focus trước khi thay câu. Hãy thử lại.";
+            return false;
         }
+
+        var inputs = new KeyboardInputEvent[replacement.Length * 2];
+        for (var i = 0; i < replacement.Length; i++)
+        {
+            inputs[i * 2] = UnicodeKey(replacement[i], false);
+            inputs[i * 2 + 1] = UnicodeKey(replacement[i], true);
+        }
+        if (SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<KeyboardInputEvent>()) != inputs.Length)
+        {
+            failure = "Windows không gửi được văn bản vào ô viết. Hãy thử lại.";
+            return false;
+        }
+
+        for (var attempt = 0; attempt < 6; attempt++)
+        {
+            Thread.Sleep(100);
+            var applied = ReadDraft(draft.Window);
+            if (applied is not null && applied.Text == replacement)
+            {
+                Thread.Sleep(800);
+                if (ReadDraft(draft.Window)?.Text == replacement) return true;
+                break;
+            }
+        }
+        failure = GetForegroundWindow() == draft.Window
+            ? "Đã gửi câu sửa nhưng chưa xác nhận được nội dung trong ô viết. Hãy kiểm tra ô viết rồi thử lại."
+            : "Ô viết mất focus trước khi xác nhận bản sửa. Hãy thử lại.";
+        return false;
     }
 
     private static bool TryPrepareDraftTarget(DraftSnapshot draft, out TextPattern pattern)
@@ -451,26 +525,81 @@ internal static class Program
 
     private static bool SelectDraftText(DraftSnapshot draft, TextPattern pattern)
     {
+        // Focusing a web editor after the popup closes can move its caret. Ask the
+        // provider to select the verified sentence range directly before using keys.
         try
         {
             draft.ExactRange.Select();
-            Thread.Sleep(50);
-            var selected = pattern.GetSelection();
-            if (selected.Length == 1 && selected[0].GetText(MaxDraftLength + 1).Trim() == draft.Text) return true;
+            Thread.Sleep(90);
+            if (SelectionMatchesDraft(pattern, draft.Text)) return true;
         }
         catch (Exception error) when (error is InvalidOperationException or COMException)
-        { /* Some editors do not support selecting a UIA text range. */ }
+        { /* Some editors do not implement range selection; use the guarded fallback. */ }
 
-        draft.CaretRange.Select();
-        var keys = new[]
+        for (var wait = 0; wait < 25 &&
+            (GetAsyncKeyState(0x11) < 0 || GetAsyncKeyState(0x12) < 0 || GetAsyncKeyState(0x10) < 0); wait++)
+            Thread.Sleep(20);
+        if (GetAsyncKeyState(0x11) < 0 || GetAsyncKeyState(0x12) < 0 || GetAsyncKeyState(0x10) < 0)
+            return false;
+
+        // Ctrl+A is safe only if this text provider contains exactly the target sentence.
+        if (pattern.DocumentRange.GetText(MaxDraftLength + 10).Trim() == draft.Text)
         {
-            KeyDown(0x24), KeyUp(0x24),
-            KeyDown(0x10), KeyDown(0x23), KeyUp(0x23), KeyUp(0x10)
-        };
-        if (SendInput((uint)keys.Length, keys, Marshal.SizeOf<KeyboardInputEvent>()) != keys.Length) return false;
-        Thread.Sleep(40);
-        var fallbackSelection = pattern.GetSelection();
-        return fallbackSelection.Length == 1 && fallbackSelection[0].GetText(MaxDraftLength + 1).Trim() == draft.Text;
+            var selectAll = new[] { KeyDown(0x11), KeyDown(0x41), KeyUp(0x41), KeyUp(0x11) };
+            if (SendInput((uint)selectAll.Length, selectAll, Marshal.SizeOf<KeyboardInputEvent>()) != selectAll.Length)
+                return false;
+            Thread.Sleep(90);
+            return SelectionMatchesDraft(pattern, draft.Text);
+        }
+
+        // For one sentence within several, move from the saved caret to the exact
+        // sentence start and extend the selection by its length. Never paste unless
+        // UI Automation confirms that only the intended sentence is selected.
+        var currentSelection = pattern.GetSelection();
+        if (currentSelection.Length != 1 ||
+            !currentSelection[0].Compare(draft.CaretRange) ||
+            currentSelection[0].CompareEndpoints(TextPatternRangeEndpoint.Start,
+                draft.ExactRange, TextPatternRangeEndpoint.Start) < 0 ||
+            currentSelection[0].CompareEndpoints(TextPatternRangeEndpoint.Start,
+                draft.ExactRange, TextPatternRangeEndpoint.End) > 0) return false;
+        var beforeCaret = draft.ExactRange.Clone();
+        beforeCaret.MoveEndpointByRange(TextPatternRangeEndpoint.End,
+            currentSelection[0], TextPatternRangeEndpoint.Start);
+        var distance = beforeCaret.GetText(MaxDraftLength + 1).Length;
+        if (distance > draft.Text.Length) return false;
+        if (!SendRepeatedKey(0x25, distance, false)) return false; // Left to sentence start.
+        if (!SendRepeatedKey(0x27, draft.Text.Length, true)) return false; // Select right.
+        Thread.Sleep(90);
+        return SelectionMatchesDraft(pattern, draft.Text);
+    }
+
+    private static bool SendRepeatedKey(ushort key, int count, bool shift)
+    {
+        for (var sent = 0; sent < count; sent += 8)
+        {
+            var batch = new List<KeyboardInputEvent>();
+            if (shift) batch.Add(KeyDown(0x10));
+            for (var i = 0; i < Math.Min(8, count - sent); i++)
+            {
+                batch.Add(KeyDown(key));
+                batch.Add(KeyUp(key));
+            }
+            if (shift) batch.Add(KeyUp(0x10));
+            var inputs = batch.ToArray();
+            if (SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<KeyboardInputEvent>()) != inputs.Length)
+                return false;
+            Thread.Sleep(15);
+        }
+        return true;
+    }
+
+    private static bool SelectionMatchesDraft(TextPattern pattern, string expected)
+    {
+        var selected = pattern.GetSelection();
+        var actual = selected.Length == 1 ? selected[0].GetText(MaxDraftLength + 1).Trim() : string.Empty;
+        if (actual == expected) return true;
+        Console.Error.WriteLine($"Writing selection mismatch: ranges={selected.Length}, selectedLength={actual.Length}, expectedLength={expected.Length}");
+        return false;
     }
 
     private static KeyboardInputEvent KeyDown(ushort key) => new()
@@ -481,6 +610,12 @@ internal static class Program
     private static KeyboardInputEvent KeyUp(ushort key) => new()
     {
         Type = 1, Keyboard = new KeyboardData { VirtualKey = key, Flags = 0x0002 }
+    };
+
+    private static KeyboardInputEvent UnicodeKey(char value, bool keyUp) => new()
+    {
+        Type = 1,
+        Keyboard = new KeyboardData { Scan = value, Flags = keyUp ? 0x0006u : 0x0004u }
     };
 
     private static bool ActivateWindow(IntPtr target)
@@ -521,18 +656,6 @@ internal static class Program
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint SendInput(uint count, KeyboardInputEvent[] inputs, int size);
-
-    [DllImport("ole32.dll")]
-    private static extern int OleInitialize(IntPtr reserved);
-
-    [DllImport("ole32.dll")]
-    private static extern int OleGetClipboard(out IntPtr dataObject);
-
-    [DllImport("ole32.dll")]
-    private static extern int OleSetClipboard(IntPtr dataObject);
-
-    [DllImport("user32.dll")]
-    private static extern uint GetClipboardSequenceNumber();
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -613,6 +736,10 @@ internal static class Program
         {
             // Some accessibility providers invalidate a range between UIA calls.
         }
+        catch (COMException)
+        {
+            // Third-party accessibility providers can disconnect while selection changes.
+        }
 
         return null;
     }
@@ -627,8 +754,27 @@ internal static class Program
         GetAsyncKeyState(VirtualKeyLeftMouseButton) < 0 ||
         GetAsyncKeyState(VirtualKeyShift) < 0;
 
+    private static uint CurrentInputTick()
+    {
+        var info = new LastInputInfo { Size = (uint)Marshal.SizeOf<LastInputInfo>() };
+        return GetLastInputInfo(ref info) ? info.Time : 0;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LastInputInfo { public uint Size; public uint Time; }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetLastInputInfo(ref LastInputInfo info);
+
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr WindowFromPoint(NativePoint point);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetAncestor(IntPtr hWnd, uint flags);
 
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
@@ -643,7 +789,7 @@ internal static class Program
     [StructLayout(LayoutKind.Sequential)]
     private struct NativePoint { public int X; public int Y; }
 
-    private sealed record ClickEvent(string Type, int X, int Y, string? ForegroundProcess);
+    private sealed record ClickEvent(string Type, int X, int Y, string? ForegroundProcess, string? TargetWindow);
     private sealed record Selection(string Text, Bounds Bounds);
     private sealed record Bounds(double X, double Y, double Width, double Height);
     private sealed record MonitorEvent(string Type, string? Text = null, Bounds? Bounds = null);

@@ -41,10 +41,12 @@
       "electron/selection-preview.js",
       "electron/selection-preview-preload.js",
       "electron/writing-popup.html",
+      "electron/popup-theme.css",
       "electron/writing-popup.css",
       "electron/writing-popup.js",
       "electron/writing-popup-preload.js",
-      "public/lexforge-mark.svg",
+      "public/lexforge-mark.png",
+      "public/icon.ico",
       "package.json"
     ],
     "extraResources": [

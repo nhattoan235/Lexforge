@@ -5,8 +5,10 @@ const { spawn } = require('child_process');
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
 let mainWindow;
+let mainWindowRevealed = false;
 let startupWindow;
 let startupShownAt = 0;
+let startupShownPromise = Promise.resolve();
 let assistantWindow;
 let selectionPreviewWindow;
 let writingWindow;
@@ -15,18 +17,24 @@ let positioningWritingWindow = false;
 let lastProgrammaticWritingBounds = null;
 let writingDragState = null;
 let assistantTray;
+let devSelectionMonitorPath;
 let selectionMonitorProcess;
 let selectionMonitorBuffer = '';
 let outsideClickProcess;
 let outsideClickBuffer = '';
+let outsideClickRestartTimer = null;
 let writingMonitorProcess;
 let writingMonitorBuffer = '';
+let selectionMonitorRestartTimer = null;
+let writingMonitorRestartTimer = null;
 let writingDraft = null;
+let assistantTheme = 'light';
 let writingTimer = null;
 let writingAbort = null;
 let writingRequestVersion = 0;
 let dismissedWritingRevision = null;
 let pendingWritingApply = null;
+let failedWritingApplyRevision = null;
 let pendingWritingFocus = null;
 let currentWritingSuggestion = null;
 let currentWritingTranslation = null;
@@ -36,6 +44,8 @@ let writingMonitorReady = false;
 let writingMonitorMessage = 'Đang khởi tạo hỗ trợ viết nhanh…';
 let assistantWidgetPosition = null;
 let assistantDragState = null;
+let lastWidgetDragMovedAt = 0;
+let lastAssistantPointerDownAt = 0;
 let assistantCollapsedOrigin = null;
 let assistantExpandedBounds = null;
 let quickSelectionTimer = null;
@@ -48,15 +58,48 @@ let assistantExpanded = false;
 let appIsQuitting = false;
 
 const WIDGET_SIZE = 76;
-const PANEL_SIZE = { width: 410, height: 690 };
+const WIDGET_EDGE_GAP = 8;
+const PANEL_SIZE = { width: 440, height: 740 };
 const SELECTION_PREVIEW_WIDTH = 340;
 const QUICK_SELECTION_DELAY_MS = 500;
-const WRITING_PAUSE_MS = 400;
+// The native monitor already waits for a quiet typing interval before sending a draft.
+const WRITING_PAUSE_MS = 0;
 const WRITING_WINDOW_WIDTH = 420;
+const STARTUP_MIN_DURATION_MS = 4000;
+let assistantStartupScheduled = false;
+
+function scheduleAssistantStartup() {
+  if (assistantStartupScheduled || !assistantEnabled || appIsQuitting) return;
+  assistantStartupScheduled = true;
+  // Let the main renderer settle before starting the widget and native monitors.
+  const delay = Math.max(0, 2500 - (Date.now() - startupShownAt));
+  setTimeout(() => {
+    if (appIsQuitting) return;
+    createAssistantWindow();
+    startSelectionMonitor();
+    startWritingMonitor();
+  }, delay);
+}
+
+function transitionToMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed() || mainWindowRevealed) return;
+  mainWindowRevealed = true;
+  const splash = startupWindow && !startupWindow.isDestroyed() ? startupWindow : null;
+  // Prepare the maximized window behind the always-on-top splash first.
+  mainWindow.showInactive();
+  mainWindow.maximize();
+  setTimeout(() => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (splash && !splash.isDestroyed()) splash.close();
+    mainWindow.focus();
+  }, 250);
+}
 
 function createWindow() {
+  mainWindowRevealed = false;
   mainWindow = new BrowserWindow({
     width: 1280, height: 800, minWidth: 1024, minHeight: 680,
+    icon: path.join(__dirname, '../public/icon.ico'),
     autoHideMenuBar: true,
     webPreferences: {
       nodeIntegration: false, contextIsolation: true,
@@ -65,23 +108,39 @@ function createWindow() {
     },
     show: false, backgroundColor: '#0f0f1a',
   });
-  mainWindow.maximize();
   let loaded = false;
-  let painted = false;
+  let uiReady = false;
   let revealed = false;
   const revealWhenReady = () => {
-    if (!loaded || !painted || revealed) return;
+    if (!loaded || !uiReady || revealed) return;
     revealed = true;
-    const delay = Math.max(0, 800 - (Date.now() - startupShownAt));
-    setTimeout(() => {
-      if (!mainWindow || mainWindow.isDestroyed()) return;
-      mainWindow.show();
-      mainWindow.focus();
-      if (startupWindow && !startupWindow.isDestroyed()) startupWindow.close();
-    }, delay);
+    startupShownPromise.then(() => {
+      const delay = Math.max(0, STARTUP_MIN_DURATION_MS - (Date.now() - startupShownAt));
+      setTimeout(() => transitionToMainWindow(), delay);
+    });
   };
   mainWindow.webContents.once('did-finish-load', () => { loaded = true; revealWhenReady(); });
-  mainWindow.once('ready-to-show', () => { painted = true; revealWhenReady(); });
+  const onUiReady = (event) => {
+    if (event.sender !== mainWindow?.webContents) return;
+    uiReady = true;
+    clearTimeout(readinessFallback);
+    revealWhenReady();
+    ipcMain.removeListener('lexforge-ui-ready', onUiReady);
+  };
+  ipcMain.on('lexforge-ui-ready', onUiReady);
+  mainWindow.webContents.once('did-fail-load', () => {
+    loaded = true;
+    uiReady = true;
+    revealWhenReady();
+  });
+  const readinessFallback = setTimeout(() => {
+    uiReady = true;
+    revealWhenReady();
+  }, 8000);
+  mainWindow.once('closed', () => {
+    clearTimeout(readinessFallback);
+    ipcMain.removeListener('lexforge-ui-ready', onUiReady);
+  });
   if (isDev) {
     mainWindow.loadURL('http://localhost:3000');
     if (process.env.LEXFORGE_DEVTOOLS === '1') mainWindow.webContents.openDevTools({ mode: 'detach' });
@@ -98,22 +157,48 @@ function createWindow() {
 }
 
 function createStartupWindow() {
-  startupShownAt = Date.now();
+  startupShownAt = 0;
+  let resolveShown;
+  startupShownPromise = new Promise(resolve => { resolveShown = resolve; });
   startupWindow = new BrowserWindow({
-    width: 420, height: 250,
+    width: 480, height: 320,
+    icon: path.join(__dirname, '../public/icon.ico'),
     frame: false, resizable: false, maximizable: false,
-    skipTaskbar: true, show: false,
-    backgroundColor: '#171b29',
+    skipTaskbar: true, show: false, alwaysOnTop: true,
+    paintWhenInitiallyHidden: true,
+    backgroundColor: '#0b3045',
     webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
   });
-  startupWindow.loadFile(path.join(__dirname, 'startup.html'));
-  startupWindow.once('ready-to-show', () => {
-    if (startupWindow && !startupWindow.isDestroyed()) startupWindow.show();
+  const splash = startupWindow;
+  splash.loadFile(path.join(__dirname, 'startup.html')).then(() => {
+    if (splash.isDestroyed()) return;
+    // ready-to-show may fire before the splash HTML has painted on Windows.
+    setTimeout(() => {
+      if (splash.isDestroyed()) return;
+      splash.show();
+      startupShownAt = Date.now();
+      resolveShown();
+    }, 100);
+  }).catch((error) => {
+    console.error('Startup screen failed to load:', error);
+    if (!splash.isDestroyed()) {
+      splash.show();
+      startupShownAt = Date.now();
+      resolveShown();
+    }
   });
-  startupWindow.on('closed', () => { startupWindow = null; });
+  startupWindow.on('closed', () => {
+    if (!startupShownAt) startupShownAt = Date.now();
+    resolveShown();
+    startupWindow = null;
+  });
 }
 
 function showMainWindow() {
+  if (!mainWindowRevealed && startupWindow && !startupWindow.isDestroyed()) {
+    if (startupWindow.isVisible()) startupWindow.focus();
+    return;
+  }
   if (!mainWindow || mainWindow.isDestroyed()) {
     createWindow();
     return;
@@ -128,19 +213,19 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => showAssistantPanel());
+  app.on('second-instance', () => showMainWindow());
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
+    for (const eventName of ['display-added', 'display-removed', 'display-metrics-changed']) {
+      screen.on(eventName, keepAssistantWindowInWorkArea);
+    }
     loadAssistantPreferences();
     createStartupWindow();
-    initDatabase();
-    createAssistantWindow();
+    await startupShownPromise;
+    try { await initDatabase(); } catch (error) { console.error('Database startup failed:', error); }
     createAssistantTray();
     createWindow();
-    if (assistantEnabled) {
-      startSelectionMonitor();
-      startWritingMonitor();
-    }
+    scheduleAssistantStartup();
   });
 
   app.on('window-all-closed', () => {
@@ -173,6 +258,7 @@ function loadAssistantPreferences() {
   try {
     const preferences = JSON.parse(fs.readFileSync(assistantPreferencesPath(), 'utf8'));
     if (typeof preferences.enabled === 'boolean') assistantEnabled = preferences.enabled;
+    if (preferences.theme === 'light' || preferences.theme === 'dark') assistantTheme = preferences.theme;
     if (Number.isFinite(preferences.widgetPosition?.x) && Number.isFinite(preferences.widgetPosition?.y)) {
       assistantWidgetPosition = {
         x: Math.round(preferences.widgetPosition.x),
@@ -187,12 +273,24 @@ function loadAssistantPreferences() {
 function saveAssistantPreferences() {
   try {
     fs.mkdirSync(app.getPath('userData'), { recursive: true });
-    const preferences = { enabled: assistantEnabled };
+    const preferences = { enabled: assistantEnabled, theme: assistantTheme };
     if (assistantWidgetPosition) preferences.widgetPosition = assistantWidgetPosition;
     fs.writeFileSync(assistantPreferencesPath(), JSON.stringify(preferences, null, 2));
   } catch (error) {
     console.error('Could not save assistant preferences:', error.message);
   }
+}
+
+function setAssistantTheme(theme) {
+  if (theme !== 'light' && theme !== 'dark') return assistantTheme;
+  if (assistantTheme === theme) return assistantTheme;
+  assistantTheme = theme;
+  saveAssistantPreferences();
+  for (const window of [mainWindow, assistantWindow, writingWindow, selectionPreviewWindow]) {
+    if (window && !window.isDestroyed() && !window.webContents.isDestroyed())
+      window.webContents.send('assistant:theme-changed', assistantTheme);
+  }
+  return assistantTheme;
 }
 
 function getAssistantState() {
@@ -213,9 +311,13 @@ function sendAssistantState() {
   }
 }
 
-function clampBoundsToWorkArea(bounds) {
-  const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
-  const workArea = screen.getDisplayNearestPoint(center).workArea;
+function clampBoundsToWorkArea(bounds, anchor = null) {
+  const point = anchor || { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+  const workArea = screen.getDisplayNearestPoint(point).workArea;
+  return clampBoundsToArea(bounds, workArea);
+}
+
+function clampBoundsToArea(bounds, workArea) {
   const width = Math.min(bounds.width, workArea.width);
   const height = Math.min(bounds.height, workArea.height);
   const maxX = Math.max(workArea.x, workArea.x + workArea.width - width);
@@ -230,6 +332,25 @@ function clampBoundsToWorkArea(bounds) {
   };
 }
 
+function snapWidgetBoundsToDisplay(bounds, display,
+    pointerX = bounds.x + bounds.width / 2) {
+  const withinWorkArea = clampBoundsToArea(bounds, display.workArea);
+  const { workArea } = display;
+  const gap = Math.min(WIDGET_EDGE_GAP, Math.max(0, (workArea.width - withinWorkArea.width) / 2));
+  const onLeft = pointerX < display.bounds.x + display.bounds.width / 2;
+  return {
+    ...withinWorkArea,
+    x: Math.round(onLeft
+      ? workArea.x + gap
+      : workArea.x + workArea.width - withinWorkArea.width - gap),
+  };
+}
+
+function snapWidgetBounds(bounds) {
+  const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+  return snapWidgetBoundsToDisplay(bounds, screen.getDisplayNearestPoint(center));
+}
+
 function getInitialWidgetBounds() {
   const workArea = screen.getPrimaryDisplay().workArea;
   const defaultBounds = {
@@ -238,8 +359,33 @@ function getInitialWidgetBounds() {
     width: WIDGET_SIZE,
     height: WIDGET_SIZE,
   };
-  if (!assistantWidgetPosition) return defaultBounds;
-  return clampBoundsToWorkArea({ ...defaultBounds, ...assistantWidgetPosition });
+  if (!assistantWidgetPosition) return snapWidgetBounds(defaultBounds);
+  const savedBounds = { ...defaultBounds, ...assistantWidgetPosition };
+  return isWidgetReachable(savedBounds)
+    ? snapWidgetBounds(savedBounds)
+    : snapWidgetBounds(defaultBounds);
+}
+
+function isWidgetReachable(bounds) {
+  return screen.getAllDisplays().some(({ bounds: display }) => {
+    const visibleWidth = Math.max(0, Math.min(bounds.x + bounds.width, display.x + display.width) - Math.max(bounds.x, display.x));
+    const visibleHeight = Math.max(0, Math.min(bounds.y + bounds.height, display.y + display.height) - Math.max(bounds.y, display.y));
+    return visibleWidth >= 32 && visibleHeight >= 32;
+  });
+}
+
+function keepAssistantWindowInWorkArea() {
+  if (!assistantWindow || assistantWindow.isDestroyed()) return;
+  const bounds = assistantExpanded
+    ? clampBoundsToWorkArea(assistantWindow.getBounds())
+    : snapWidgetBounds(assistantWindow.getBounds());
+  assistantWindow.setBounds(bounds, false);
+  if (assistantExpanded) {
+    assistantExpandedBounds = bounds;
+  } else {
+    assistantWidgetPosition = { x: bounds.x, y: bounds.y };
+    saveAssistantPreferences();
+  }
 }
 
 function resizeAssistantWindow(expanded) {
@@ -256,12 +402,15 @@ function resizeAssistantWindow(expanded) {
   const collapsedPosition = panelWasMoved
     ? { x: current.x + current.width - size.width, y: current.y + current.height - size.height }
     : (assistantCollapsedOrigin || { x: current.x + current.width - size.width, y: current.y + current.height - size.height });
-  const bounds = clampBoundsToWorkArea({
+  const proposedBounds = {
     x: expanded ? current.x + current.width - size.width : collapsedPosition.x,
     y: expanded ? current.y + current.height - size.height : collapsedPosition.y,
     width: size.width,
     height: size.height,
-  });
+  };
+  const bounds = expanded
+    ? clampBoundsToWorkArea(proposedBounds)
+    : snapWidgetBounds(proposedBounds);
 
   assistantExpanded = expanded;
   if (expanded) {
@@ -270,7 +419,6 @@ function resizeAssistantWindow(expanded) {
   }
   assistantWindow.setBounds(bounds, false);
   if (!expanded) {
-    if (!writingWindow || writingWindow.isDestroyed() || !writingWindow.isVisible()) stopOutsideClickWatcher();
     assistantCollapsedOrigin = null;
     assistantExpandedBounds = null;
     assistantWidgetPosition = { x: bounds.x, y: bounds.y };
@@ -287,23 +435,47 @@ function resizeAssistantWindow(expanded) {
 function collapseAssistantPanel() {
   if (!assistantWindow || assistantWindow.isDestroyed()) return;
   resizeAssistantWindow(false);
+  assistantWindow.setAlwaysOnTop(true, 'floating');
   assistantWindow.showInactive();
+  assistantWindow.moveTop();
 }
 
 function handleOutsideClickLine(line) {
   let event;
   try { event = JSON.parse(line); } catch (_) { return; }
+  if (event.type === 'mouseMove') { moveAssistantDrag(event); return; }
+  if (event.type === 'mouseUp') {
+    moveAssistantDrag(event);
+    finishAssistantDrag();
+    return;
+  }
   if (event.type !== 'mouseDown') return;
   if (/^(screenclippinghost|snippingtool)$/i.test(event.foregroundProcess || '')) return;
   if (!Number.isFinite(event.x) || !Number.isFinite(event.y)) return;
 
-  const point = screen.screenToDipPoint({ x: event.x, y: event.y });
-  const inside = (bounds) => point.x >= bounds.x && point.x < bounds.x + bounds.width &&
-    point.y >= bounds.y && point.y < bounds.y + bounds.height;
+  // The native monitor identifies the window under the pointer. This avoids
+  // misclassifying clicks inside the panel on mixed-DPI displays.
+  const inside = (window) => {
+    if (event.targetWindow !== undefined) {
+      return event.targetWindow === window.getNativeWindowHandle().readBigInt64LE().toString();
+    }
+    // Older helper binaries do not include targetWindow. Keep this fallback
+    // for writing popups; never collapse the assistant on uncertain clicks.
+    const bounds = screen.dipToScreenRect(window, window.getBounds());
+    return event.x >= bounds.x && event.x < bounds.x + bounds.width &&
+      event.y >= bounds.y && event.y < bounds.y + bounds.height;
+  };
   if (assistantExpanded && assistantWindow && !assistantWindow.isDestroyed() &&
-      !inside(assistantWindow.getBounds())) collapseAssistantPanel();
+      assistantWindow.isVisible() && event.targetWindow !== undefined && !inside(assistantWindow)) {
+    setTimeout(() => {
+      if (assistantExpanded && assistantWindow && !assistantWindow.isDestroyed() &&
+          assistantWindow.isVisible() && Date.now() - lastAssistantPointerDownAt > 150) {
+        collapseAssistantPanel();
+      }
+    }, 80);
+  }
   if (writingWindow && !writingWindow.isDestroyed() && writingWindow.isVisible() &&
-      !inside(writingWindow.getBounds())) {
+      !inside(writingWindow)) {
     dismissedWritingRevision = writingDraft?.revision ?? null;
     clearWritingSuggestion();
   }
@@ -311,6 +483,10 @@ function handleOutsideClickLine(line) {
 
 function startOutsideClickWatcher() {
   if (process.platform !== 'win32' || appIsQuitting || outsideClickProcess) return;
+  if (outsideClickRestartTimer) {
+    clearTimeout(outsideClickRestartTimer);
+    outsideClickRestartTimer = null;
+  }
   const executable = selectionMonitorExecutablePath();
   if (!fs.existsSync(executable)) return;
 
@@ -332,18 +508,37 @@ function startOutsideClickWatcher() {
     child.stderr.on('data', (chunk) => console.warn('Outside click watcher:', chunk.trim().slice(0, 500)));
     child.on('error', (error) => {
       console.error('Could not start outside click watcher:', error.message);
-      if (outsideClickProcess === child) outsideClickProcess = null;
+      if (outsideClickProcess === child) {
+        outsideClickProcess = null;
+        scheduleOutsideClickWatcherRestart();
+      }
     });
     child.on('close', () => {
-      if (outsideClickProcess === child) outsideClickProcess = null;
+      if (outsideClickProcess === child) {
+        outsideClickProcess = null;
+        scheduleOutsideClickWatcherRestart();
+      }
     });
   } catch (error) {
     console.error('Could not start outside click watcher:', error.message);
     outsideClickProcess = null;
+    scheduleOutsideClickWatcherRestart();
   }
 }
 
+function scheduleOutsideClickWatcherRestart() {
+  if (appIsQuitting || outsideClickRestartTimer) return;
+  outsideClickRestartTimer = setTimeout(() => {
+    outsideClickRestartTimer = null;
+    startOutsideClickWatcher();
+  }, 2000);
+}
+
 function stopOutsideClickWatcher() {
+  if (outsideClickRestartTimer) {
+    clearTimeout(outsideClickRestartTimer);
+    outsideClickRestartTimer = null;
+  }
   const child = outsideClickProcess;
   outsideClickProcess = null;
   outsideClickBuffer = '';
@@ -355,11 +550,29 @@ function showAssistantPanel() {
     createAssistantWindow();
   }
 
+  if (assistantExpanded) {
+    assistantWindow.setBounds(clampBoundsToWorkArea(assistantWindow.getBounds()), false);
+  }
   assistantWindow.setAlwaysOnTop(true, 'floating');
   assistantWindow.show();
   assistantWindow.focus();
   if (!assistantExpanded) resizeAssistantWindow(true);
-  else startOutsideClickWatcher();
+  sendAssistantState();
+}
+
+function showAssistantBubble() {
+  if (!assistantWindow || assistantWindow.isDestroyed()) createAssistantWindow();
+  if (assistantExpanded) resizeAssistantWindow(false);
+  // Return the bubble to its default position when explicitly requested.
+  const workArea = screen.getPrimaryDisplay().workArea;
+  const x = workArea.x + workArea.width - WIDGET_SIZE - WIDGET_EDGE_GAP;
+  const y = workArea.y + workArea.height - WIDGET_SIZE;
+  assistantWindow.setPosition(x, y);
+  assistantWidgetPosition = { x, y };
+  saveAssistantPreferences();
+  assistantWindow.setAlwaysOnTop(true, 'floating');
+  assistantWindow.showInactive();
+  assistantWindow.moveTop();
   sendAssistantState();
 }
 
@@ -393,12 +606,15 @@ function createAssistantWindow() {
   assistantWindow.setAlwaysOnTop(true, 'floating');
   assistantWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false });
   assistantWindow.loadFile(path.join(__dirname, 'assistant-widget.html'));
-  assistantWindow.once('ready-to-show', () => {
-    if (!assistantWindow || assistantWindow.isDestroyed()) return;
+  const revealAssistant = () => {
+    if (!assistantWindow || assistantWindow.isDestroyed() || assistantWindow.isVisible()) return;
     assistantWindow.setAlwaysOnTop(true, 'floating');
     assistantWindow.showInactive();
+    startOutsideClickWatcher();
     sendAssistantState();
-  });
+  };
+  assistantWindow.once('ready-to-show', revealAssistant);
+  assistantWindow.webContents.once('did-finish-load', revealAssistant);
   assistantWindow.on('focus', () => {
     if (!assistantWindow || assistantWindow.isDestroyed()) return;
     assistantWindow.setAlwaysOnTop(true, 'floating');
@@ -406,7 +622,7 @@ function createAssistantWindow() {
   assistantWindow.on('close', (event) => {
     if (appIsQuitting) return;
     event.preventDefault();
-    if (isDev) console.warn('Ignored native assistant close; use the panel control or click outside to collapse it.');
+    if (isDev) console.warn('Ignored native assistant close; use the panel control to collapse it.');
   });
   assistantWindow.on('closed', () => {
     assistantWindow = null;
@@ -421,7 +637,22 @@ function selectionMonitorExecutablePath() {
     return path.join(process.resourcesPath, 'selection-monitor', 'Lexforge.SelectionMonitor.exe');
   }
 
-  return path.join(__dirname, 'selection-monitor', 'bin', 'Release', 'net10.0-windows', 'Lexforge.SelectionMonitor.exe');
+  if (devSelectionMonitorPath) return devSelectionMonitorPath;
+  const bin = path.join(__dirname, 'selection-monitor', 'bin', 'Release');
+  const candidates = ['net10.0-windows', 'net10.0-windows-v2']
+    .map(name => path.join(bin, name, 'Lexforge.SelectionMonitor.exe'))
+    .filter(candidate => fs.existsSync(candidate))
+    .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+  if (!candidates.length) return path.join(bin, 'net10.0-windows', 'Lexforge.SelectionMonitor.exe');
+
+  const sourceDir = path.dirname(candidates[0]);
+  const runDir = fs.mkdtempSync(path.join(app.getPath('temp'), 'lexforge-monitor-'));
+  const name = 'Lexforge.SelectionMonitor';
+  for (const extension of ['.exe', '.dll', '.deps.json', '.runtimeconfig.json']) {
+    fs.copyFileSync(path.join(sourceDir, name + extension), path.join(runDir, name + extension));
+  }
+  devSelectionMonitorPath = path.join(runDir, name + '.exe');
+  return devSelectionMonitorPath;
 }
 
 function createSelectionPreviewWindow() {
@@ -482,12 +713,12 @@ function looksLikeEnglishSelection(text) {
 
 function scheduleQuickTranslation(selection) {
   clearQuickSelection();
-  if (!assistantEnabled || assistantExpanded || !looksLikeEnglishSelection(selection.text)) return;
+  if (!assistantEnabled || !looksLikeEnglishSelection(selection.text)) return;
   const version = quickSelectionVersion;
   quickSelectionBounds = selection.bounds;
   quickSelectionTimer = setTimeout(async () => {
     quickSelectionTimer = null;
-    if (version !== quickSelectionVersion || !assistantEnabled || assistantExpanded) return;
+    if (version !== quickSelectionVersion || !assistantEnabled) return;
     const cached = quickTranslationCache.get(selection.text);
     if (cached) {
       showQuickTranslation(cached, version);
@@ -502,8 +733,9 @@ function scheduleQuickTranslation(selection) {
       if (quickTranslationCache.size > 30) quickTranslationCache.delete(quickTranslationCache.keys().next().value);
       showQuickTranslation(translation, version);
     } catch (error) {
-      if (error.name !== 'AbortError' && error.name !== 'TimeoutError' && isDev) {
-        console.warn('Quick translation unavailable:', error.message);
+      if (!controller.signal.aborted) {
+        if (isDev) console.warn('Quick translation unavailable:', error.message);
+        showQuickTranslation(getWritingTaskErrorMessage(error), version, true);
       }
     } finally {
       if (quickSelectionAbort === controller) quickSelectionAbort = null;
@@ -511,12 +743,12 @@ function scheduleQuickTranslation(selection) {
   }, QUICK_SELECTION_DELAY_MS);
 }
 
-function showQuickTranslation(translation, version) {
-  if (version !== quickSelectionVersion || !quickSelectionBounds || assistantExpanded) return;
+function showQuickTranslation(translation, version, failed = false) {
+  if (version !== quickSelectionVersion || !quickSelectionBounds) return;
   const preview = createSelectionPreviewWindow();
   const send = () => {
     if (version !== quickSelectionVersion || preview.isDestroyed()) return;
-    preview.webContents.send('assistant:quick-translation', { translation, version });
+    preview.webContents.send('assistant:quick-translation', { translation, version, failed });
   };
   if (preview.webContents.isLoading()) preview.webContents.once('did-finish-load', send);
   else send();
@@ -554,7 +786,6 @@ function handleSelectionMonitorLine(line) {
   }
 
   if (event.type === 'selection' && typeof event.text === 'string' && event.text.trim() && event.bounds) {
-    if (assistantExpanded) return;
     scheduleQuickTranslation({ text: event.text.trim(), bounds: event.bounds });
   } else if (event.type === 'clear') {
     clearQuickSelection();
@@ -568,6 +799,8 @@ function handleSelectionMonitorLine(line) {
 function startSelectionMonitor() {
   if (!assistantEnabled || process.platform !== 'win32' || appIsQuitting) return;
   if (selectionMonitorProcess && !selectionMonitorProcess.killed) return;
+  if (selectionMonitorRestartTimer) clearTimeout(selectionMonitorRestartTimer);
+  selectionMonitorRestartTimer = null;
 
   selectionMonitorReady = false;
   selectionMonitorMessage = 'Đang khởi tạo nhận diện vùng chọn…';
@@ -607,6 +840,7 @@ function startSelectionMonitor() {
       selectionMonitorMessage = 'Không khởi động được nhận diện vùng chọn. Hãy tắt rồi bật lại trợ lý.';
       clearQuickSelection();
       sendAssistantState();
+      scheduleSelectionMonitorRestart();
     });
     child.on('close', (code) => {
       if (selectionMonitorProcess !== child) return;
@@ -617,6 +851,7 @@ function startSelectionMonitor() {
         : 'Trợ lý đang tắt.';
       clearQuickSelection();
       sendAssistantState();
+      scheduleSelectionMonitorRestart();
     });
   } catch (error) {
     console.error('Could not start selection monitor:', error.message);
@@ -624,10 +859,21 @@ function startSelectionMonitor() {
     selectionMonitorReady = false;
     selectionMonitorMessage = 'Không khởi động được nhận diện vùng chọn. Hãy tắt rồi bật lại trợ lý.';
     sendAssistantState();
+    scheduleSelectionMonitorRestart();
   }
 }
 
+function scheduleSelectionMonitorRestart() {
+  if (!assistantEnabled || appIsQuitting || selectionMonitorRestartTimer) return;
+  selectionMonitorRestartTimer = setTimeout(() => {
+    selectionMonitorRestartTimer = null;
+    startSelectionMonitor();
+  }, 3000);
+}
+
 function stopSelectionMonitor() {
+  if (selectionMonitorRestartTimer) clearTimeout(selectionMonitorRestartTimer);
+  selectionMonitorRestartTimer = null;
   const child = selectionMonitorProcess;
   selectionMonitorProcess = null;
   selectionMonitorReady = false;
@@ -735,7 +981,6 @@ function clearWritingSuggestion() {
   currentWritingSuggestion = null;
   currentWritingTranslation = null;
   if (writingWindow && !writingWindow.isDestroyed()) writingWindow.hide();
-  if (!assistantExpanded) stopOutsideClickWatcher();
 }
 
 function positionWritingWindow(height, revision) {
@@ -770,8 +1015,8 @@ function positionWritingWindow(height, revision) {
   startOutsideClickWatcher();
 }
 
-function showWritingSuggestion(corrected, revision) {
-  if (!writingDraft || writingDraft.revision !== revision || assistantExpanded || !assistantEnabled) return;
+function showWritingSuggestion(corrected, revision, failure = '') {
+  if (!writingDraft || writingDraft.revision !== revision || !assistantEnabled) return;
   manualWritingPosition = null;
   currentWritingSuggestion = corrected;
   const popup = createWritingWindow();
@@ -781,6 +1026,7 @@ function showWritingSuggestion(corrected, revision) {
         revision,
         original: writingDraft.text,
         corrected,
+        failure,
       });
     }
   };
@@ -794,10 +1040,10 @@ async function requestGrammarSuggestion(text, signal) {
   const apiKey = settings[0]?.values?.[0]?.[0];
   if (typeof apiKey !== 'string' || !apiKey.trim()) throw new Error('NO_GROQ_KEY');
 
-  const timeout = setTimeout(() => signal.abort(), 20_000);
+  const timeout = setTimeout(() => signal.abort(new Error('TIMEOUT')), 20_000);
   try {
     const messages = [
-      { role: 'system', content: 'You are an English grammar assistant. Correct only genuine grammar or spelling errors in the supplied English line. If it is a clear unfinished fragment, complete it naturally without adding new facts. Preserve the writer’s meaning, names and tone. Do not suggest stylistic rewrites when grammar is already fine. Return only JSON: {"needsCorrection":true or false,"corrected":"one complete English line"}. If the text is not English or is already correct, set needsCorrection to false.' },
+      { role: 'system', content: 'You are an English grammar assistant. Correct only genuine grammar or spelling errors in the supplied English sentence or unfinished sentence. If it is a clear unfinished fragment, complete it naturally without adding new facts. Preserve the writer’s meaning, names and tone. Do not suggest stylistic rewrites when grammar is already fine. Return only JSON: {"needsCorrection":true or false,"corrected":"one complete English line"}. If the text is not English or is already correct, set needsCorrection to false.' },
       { role: 'user', content: text },
     ];
     const request = (model) => fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -806,18 +1052,21 @@ async function requestGrammarSuggestion(text, signal) {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey.trim()}` },
       body: JSON.stringify({
         model, messages,
-        reasoning_effort: 'low',
-        reasoning_format: 'hidden',
-        temperature: 0.1,
-        max_completion_tokens: 350,
-        response_format: { type: 'json_object' },
+        max_completion_tokens: 700,
       }),
     });
     let response = await request('openai/gpt-oss-20b');
-    if (response.status === 400) response = await request('openai/gpt-oss-120b');
-    if (!response.ok) throw new Error(`GROQ_HTTP_${response.status}`);
+    if (response.status === 400 || response.status === 403) response = await request('openai/gpt-oss-120b');
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => null);
+      if (isDev) console.warn('Writing Groq request rejected:', response.status,
+        errorBody?.error?.code || '', errorBody?.error?.type || '');
+      throw new Error(`GROQ_HTTP_${response.status}`);
+    }
     const data = await response.json();
-    const result = JSON.parse(data.choices?.[0]?.message?.content || '{}');
+    const content = data.choices?.[0]?.message?.content || '';
+    const json = content.match(/\{[\s\S]*\}/)?.[0] || '{}';
+    const result = JSON.parse(json);
     const corrected = typeof result.corrected === 'string' ? result.corrected.trim() : '';
     if (result.needsCorrection !== true || !corrected || corrected === text ||
         corrected.length > 500 || /[\r\n]/.test(corrected)) return '';
@@ -865,6 +1114,7 @@ function handleWritingMonitorLine(line) {
   }
   if (event.type === 'applyResult') {
     if (pendingWritingApply && pendingWritingApply.revision === event.revision) {
+      failedWritingApplyRevision = event.success === true ? null : event.revision;
       pendingWritingApply.resolve({ success: event.success === true, error: event.error || '' });
       pendingWritingApply = null;
     }
@@ -882,14 +1132,26 @@ function handleWritingMonitorLine(line) {
     return;
   }
   if (event.type === 'draftClear') {
+    // Returning focus to an editor can temporarily hide its caret from UIA.
+    // Preserve an apply error so the user can actually see why replacement failed.
+    if (pendingWritingApply || failedWritingApplyRevision === writingDraft?.revision) return;
     writingDraft = null;
     clearWritingSuggestion();
     return;
   }
+  if (event.type === 'draftInput') {
+    if (!pendingWritingApply) {
+      writingDraft = null;
+      failedWritingApplyRevision = null;
+      clearWritingSuggestion();
+    }
+    return;
+  }
   if (event.type !== 'draft' || typeof event.text !== 'string' || !event.bounds ||
-      !Number.isInteger(event.revision) || assistantExpanded || !assistantEnabled) return;
+      !Number.isInteger(event.revision) || !assistantEnabled) return;
 
   writingDraft = { revision: event.revision, text: event.text, bounds: event.bounds };
+  failedWritingApplyRevision = null;
   clearWritingSuggestion();
   if (!looksLikeEnglishSelection(event.text) || event.revision === dismissedWritingRevision) return;
   const requestVersion = writingRequestVersion;
@@ -902,7 +1164,10 @@ function handleWritingMonitorLine(line) {
       const corrected = await requestGrammarSuggestion(event.text, controller);
       if (requestVersion === writingRequestVersion && corrected) showWritingSuggestion(corrected, event.revision);
     } catch (error) {
-      if (error.name !== 'AbortError' && isDev) console.warn('Writing suggestion unavailable:', error.message);
+      if (!controller.signal.aborted || controller.signal.reason?.message === 'TIMEOUT') {
+        if (isDev) console.warn('Writing suggestion unavailable:', error.message);
+        showWritingSuggestion('', event.revision, getWritingTaskErrorMessage(error));
+      }
     } finally {
       if (writingAbort === controller) writingAbort = null;
     }
@@ -911,6 +1176,8 @@ function handleWritingMonitorLine(line) {
 
 function startWritingMonitor() {
   if (!assistantEnabled || process.platform !== 'win32' || appIsQuitting || writingMonitorProcess) return;
+  if (writingMonitorRestartTimer) clearTimeout(writingMonitorRestartTimer);
+  writingMonitorRestartTimer = null;
   const executable = selectionMonitorExecutablePath();
   if (!fs.existsSync(executable)) {
     writingMonitorMessage = 'Chưa có bộ hỗ trợ viết nhanh trên máy này.';
@@ -943,6 +1210,7 @@ function startWritingMonitor() {
       writingDraft = null;
       clearWritingSuggestion();
       sendAssistantState();
+      scheduleWritingMonitorRestart();
     });
     child.on('close', () => {
       if (writingMonitorProcess === child) writingMonitorProcess = null;
@@ -951,16 +1219,28 @@ function startWritingMonitor() {
       writingDraft = null;
       clearWritingSuggestion();
       sendAssistantState();
+      scheduleWritingMonitorRestart();
     });
   } catch (error) {
     writingMonitorProcess = null;
     writingMonitorReady = false;
     writingMonitorMessage = 'Không khởi động được hỗ trợ viết nhanh.';
     if (isDev) console.warn('Writing monitor unavailable:', error.message);
+    scheduleWritingMonitorRestart();
   }
 }
 
+function scheduleWritingMonitorRestart() {
+  if (!assistantEnabled || appIsQuitting || writingMonitorRestartTimer) return;
+  writingMonitorRestartTimer = setTimeout(() => {
+    writingMonitorRestartTimer = null;
+    startWritingMonitor();
+  }, 3000);
+}
+
 function stopWritingMonitor() {
+  if (writingMonitorRestartTimer) clearTimeout(writingMonitorRestartTimer);
+  writingMonitorRestartTimer = null;
   const child = writingMonitorProcess;
   writingMonitorProcess = null;
   writingMonitorReady = false;
@@ -999,7 +1279,7 @@ const WRITING_TASKS = {
 };
 
 function getWritingTaskErrorMessage(error) {
-  const code = error.name === 'TimeoutError' ? 'TIMEOUT' : error.message;
+  const code = error.name === 'TimeoutError' || error.name === 'AbortError' ? 'TIMEOUT' : error.message;
   const messages = {
     DATABASE_NOT_READY: 'Cơ sở dữ liệu đang khởi động. Hãy thử lại sau ít giây.',
     NO_GROQ_KEY: 'Chưa có Groq API key. Hãy thêm khóa trong Cài Đặt.',
@@ -1010,6 +1290,10 @@ function getWritingTaskErrorMessage(error) {
     EMPTY_RESPONSE: 'AI chưa trả về nội dung. Hãy thử lại.',
   };
   const statusMatch = /^GROQ_HTTP_(\d{3})$/.exec(code || '');
+  if (statusMatch?.[1] === '401') return 'Groq từ chối API key (HTTP 401). Hãy tạo khóa mới và lưu trong Cài Đặt.';
+  if (statusMatch?.[1] === '403') return 'Groq chặn quyền dùng mô hình (HTTP 403). Hãy kiểm tra quyền mô hình của tổ chức hoặc dự án trên Groq.';
+  if (statusMatch?.[1] === '400') return 'Groq từ chối định dạng yêu cầu (HTTP 400). Hãy kiểm tra log ứng dụng để biết mã lỗi.';
+  if (statusMatch?.[1] === '429') return 'Groq đang giới hạn yêu cầu. Hãy đợi một chút rồi thử lại.';
   if (statusMatch) return `Groq trả về lỗi HTTP ${statusMatch[1]}. Hãy thử lại sau.`;
   return messages[code] || 'Không kết nối được Groq. Hãy kiểm tra mạng rồi thử lại.';
 }
@@ -1064,7 +1348,7 @@ async function runWritingTask(input) {
       }),
     });
 
-    if (response.status === 401 || response.status === 403) throw new Error('INVALID_GROQ_KEY');
+    if (response.status === 401 || response.status === 403) throw new Error(`GROQ_HTTP_${response.status}`);
     if (response.status === 429) throw new Error('GROQ_RATE_LIMIT');
     if (!response.ok) throw new Error(`GROQ_HTTP_${response.status}`);
 
@@ -1133,6 +1417,7 @@ function updateAssistantTrayMenu() {
       click: (item) => setAssistantEnabled(item.checked),
     },
     { type: 'separator' },
+    { label: 'Khởi động lại Lexforge', click: () => { app.relaunch(); app.quit(); } },
     { label: 'Thoát Lexforge', click: () => app.quit() },
   ]));
 }
@@ -1160,6 +1445,7 @@ function setAssistantEnabled(enabled) {
   assistantEnabled = Boolean(enabled);
   saveAssistantPreferences();
   if (assistantEnabled) {
+    createAssistantWindow();
     startSelectionMonitor();
     startWritingMonitor();
   } else {
@@ -1177,35 +1463,106 @@ function assertAssistantSender(event) {
   }
 }
 
+function assertThemeSender(event) {
+  const windows = [mainWindow, assistantWindow, writingWindow, selectionPreviewWindow];
+  if (!windows.some(window => window && !window.isDestroyed() && event.sender.id === window.webContents.id))
+    throw new Error('Theme IPC request came from an unexpected window.');
+}
+
+ipcMain.handle('assistant:get-theme', (event) => {
+  assertThemeSender(event);
+  return assistantTheme;
+});
+ipcMain.handle('assistant:set-theme', (event, theme) => {
+  assertThemeSender(event);
+  return setAssistantTheme(theme);
+});
+
+function moveAssistantDrag(point) {
+  if (!assistantDragState || !assistantWindow || assistantWindow.isDestroyed() || assistantExpanded) return;
+  const cursor = Number.isFinite(point?.x) && Number.isFinite(point?.y)
+    ? point : screen.getCursorScreenPoint();
+  const state = assistantDragState;
+  if (!state.moved && Math.hypot(cursor.x - state.startX, cursor.y - state.startY) < 4) return;
+  state.moved = true;
+  state.pointerX = cursor.x;
+  lastWidgetDragMovedAt = Date.now();
+  const displays = screen.getAllDisplays();
+  const displayUnderCursor = displays.find(({ bounds: displayBounds }) =>
+    cursor.x >= displayBounds.x && cursor.x < displayBounds.x + displayBounds.width &&
+    cursor.y >= displayBounds.y && cursor.y < displayBounds.y + displayBounds.height
+  );
+  if (displayUnderCursor) state.displayId = displayUnderCursor.id;
+  const dragDisplay = displays.find(({ id }) => id === state.displayId) ||
+    screen.getDisplayNearestPoint(cursor);
+  state.displayId = dragDisplay.id;
+  const next = snapWidgetBoundsToDisplay({
+    width: state.width,
+    height: state.height,
+    x: Math.round(cursor.x - state.offsetX),
+    y: Math.round(cursor.y - state.offsetY),
+  }, dragDisplay, cursor.x);
+  state.targetBounds = next;
+  if (state.lastX !== next.x || state.lastY !== next.y) {
+    assistantWindow.setPosition(next.x, next.y);
+    state.lastX = next.x;
+    state.lastY = next.y;
+  }
+}
+
+function finishAssistantDrag(moved = false) {
+  const state = assistantDragState;
+  const didMove = Boolean(state?.moved || moved);
+  assistantDragState = null;
+  if (assistantWindow && !assistantWindow.isDestroyed() && !assistantWindow.webContents.isDestroyed()) {
+    assistantWindow.webContents.send('assistant:drag-finished', didMove);
+  }
+  if (!didMove || !assistantWindow || assistantWindow.isDestroyed()) return;
+  lastWidgetDragMovedAt = Date.now();
+  const dragDisplay = screen.getAllDisplays().find(({ id }) => id === state?.displayId) ||
+    screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const currentBounds = state?.targetBounds || assistantWindow.getBounds();
+  const bounds = snapWidgetBoundsToDisplay(
+    currentBounds, dragDisplay,
+    state?.pointerX ?? currentBounds.x + currentBounds.width / 2);
+  assistantWindow.setPosition(bounds.x, bounds.y);
+  const { x, y } = bounds;
+  assistantWidgetPosition = { x, y };
+  saveAssistantPreferences();
+  assistantWindow.setAlwaysOnTop(true, 'floating');
+  assistantWindow.showInactive();
+}
+
 ipcMain.on('assistant:drag-start', (event) => {
   assertAssistantSender(event);
   if (!assistantWindow || assistantWindow.isDestroyed() || assistantExpanded) return;
   const cursor = screen.getCursorScreenPoint();
   const bounds = assistantWindow.getBounds();
-  assistantDragState = { offsetX: cursor.x - bounds.x, offsetY: cursor.y - bounds.y };
+  assistantDragState = {
+    offsetX: cursor.x - bounds.x,
+    offsetY: cursor.y - bounds.y,
+    startX: cursor.x,
+    startY: cursor.y,
+    width: bounds.width,
+    height: bounds.height,
+    lastX: bounds.x,
+    lastY: bounds.y,
+    moved: false,
+    displayId: screen.getDisplayNearestPoint(cursor).id,
+  };
+  startOutsideClickWatcher();
+});
+ipcMain.on('assistant:pointer-down', (event) => {
+  assertAssistantSender(event);
+  lastAssistantPointerDownAt = Date.now();
 });
 ipcMain.on('assistant:drag-move', (event) => {
   assertAssistantSender(event);
-  if (!assistantDragState || !assistantWindow || assistantWindow.isDestroyed() || assistantExpanded) return;
-  const cursor = screen.getCursorScreenPoint();
-  const bounds = assistantWindow.getBounds();
-  const nextBounds = clampBoundsToWorkArea({
-    x: cursor.x - assistantDragState.offsetX,
-    y: cursor.y - assistantDragState.offsetY,
-    width: bounds.width,
-    height: bounds.height,
-  });
-  assistantWindow.setPosition(Math.round(nextBounds.x), Math.round(nextBounds.y));
+  moveAssistantDrag();
 });
 ipcMain.on('assistant:drag-end', (event, moved) => {
   assertAssistantSender(event);
-  assistantDragState = null;
-  if (moved !== true || !assistantWindow || assistantWindow.isDestroyed()) return;
-  const { x, y } = assistantWindow.getBounds();
-  assistantWidgetPosition = { x, y };
-  saveAssistantPreferences();
-  assistantWindow.setAlwaysOnTop(true, 'floating');
-  assistantWindow.showInactive();
+  finishAssistantDrag(moved === true);
 });
 
 ipcMain.on('assistant:quick-preview-height', (event, height, version) => {
@@ -1285,7 +1642,7 @@ ipcMain.handle('assistant:writing-translate', async (event, revision, text) => {
 ipcMain.handle('assistant:writing-apply', async (event, revision, mode, text) => {
   assertWritingSender(event);
   if (!assistantEnabled || !writingMonitorProcess || !writingDraft || writingDraft.revision !== revision ||
-      !['replace', 'insert'].includes(mode) || typeof text !== 'string' ||
+      !['replace', 'replaceTranslation'].includes(mode) || typeof text !== 'string' ||
       (mode === 'replace' ? text !== currentWritingSuggestion : text !== currentWritingTranslation)) {
     return { success: false, error: 'Đề xuất đã cũ. Hãy chọn lại ô đang viết.' };
   }
@@ -1318,7 +1675,15 @@ ipcMain.handle('assistant:set-enabled', (event, enabled) => {
 });
 ipcMain.handle('assistant:open-panel', (event) => {
   assertAssistantSender(event);
+  if (Date.now() - lastWidgetDragMovedAt < 300) return getAssistantState();
   showAssistantPanel();
+  return getAssistantState();
+});
+ipcMain.handle('assistant:show-from-main', (event) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender.id !== mainWindow.webContents.id) {
+    throw new Error('Assistant open request came from an unexpected window.');
+  }
+  showAssistantBubble();
   return getAssistantState();
 });
 ipcMain.handle('assistant:collapse-panel', (event) => {
@@ -1371,8 +1736,7 @@ async function initDatabase() {
   saveDb(); // Save initial state
   console.log('✅ sql.js DB initialized at:', DB_PATH);
 
-  // Auto-save every 30 seconds
-  setInterval(saveDb, 30000);
+  // Mutating IPC queries persist immediately; avoid exporting the whole DB every 30 seconds.
 }
 
 function migrateSchema() {
@@ -1493,7 +1857,7 @@ function resultToObjects(res) {
 }
 
 // ─── IPC Handlers ─────────────────────────────────────────────────────────────
-ipcMain.handle('db-connect', () => ({ success: true }));
+ipcMain.handle('db-connect', () => ({ success: !!db, error: db ? undefined : 'Database not ready' }));
 ipcMain.handle('db-status', () => ({ connected: !!db }));
 ipcMain.handle('db-get-path', () => DB_PATH);
 

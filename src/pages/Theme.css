@@ -1,0 +1,160 @@
+body[data-lexforge-theme=dark] .lf-dashboard-main{background:#102b3a!important;color:#eaf7f8}
+body[data-lexforge-theme=dark] .lf-help,body[data-lexforge-theme=dark] .lf-schedule,body[data-lexforge-theme=dark] .progress-page,body[data-lexforge-theme=dark] .settings-page,body[data-lexforge-theme=dark] .lf-training-page{background:#102b3a!important;color:#eaf7f8}
+body[data-lexforge-theme=dark] .lf-help-step,body[data-lexforge-theme=dark] .lf-help-layout nav,body[data-lexforge-theme=dark] .lf-help-topic,body[data-lexforge-theme=dark] .lf-schedule-word,body[data-lexforge-theme=dark] .progress-page .card,body[data-lexforge-theme=dark] .settings-page .settings-card,body[data-lexforge-theme=dark] .lf-training-page .card,body[data-lexforge-theme=dark] .lf-training-page .mp4-card{background:#183b4c!important;color:#eaf7f8!important;border-color:#466d7d!important}
+body[data-lexforge-theme=dark] .lf-help-step strong,body[data-lexforge-theme=dark] .lf-help-heading h2,body[data-lexforge-theme=dark] .lf-help-topic h3,body[data-lexforge-theme=dark] .lf-schedule-english,body[data-lexforge-theme=dark] .lf-schedule-vietnamese,body[data-lexforge-theme=dark] .progress-page .page-title,body[data-lexforge-theme=dark] .progress-page .card-title,body[data-lexforge-theme=dark] .settings-page .page-title,body[data-lexforge-theme=dark] .settings-page .settings-section-title,body[data-lexforge-theme=dark] .settings-page .sl-title,body[data-lexforge-theme=dark] .lf-training-page .card h3,body[data-lexforge-theme=dark] .lf-training-page .card h4{color:#effcfd!important}
+body[data-lexforge-theme=dark] .lf-help-question button,body[data-lexforge-theme=dark] .lf-help-layout nav button,body[data-lexforge-theme=dark] .lf-schedule-filters,body[data-lexforge-theme=dark] .progress-page .prog-tabs,body[data-lexforge-theme=dark] .settings-page .db-info-grid{background:#244759!important;color:#e8f7f8!important;border-color:#466d7d!important}
+body[data-lexforge-theme=dark] .lf-help-step p,body[data-lexforge-theme=dark] .lf-help-intro,body[data-lexforge-theme=dark] .lf-help-question p,body[data-lexforge-theme=dark] .settings-page .sl-desc,body[data-lexforge-theme=dark] .progress-page .page-subtitle{color:#b5d2da!important}
+body[data-lexforge-theme=dark] .settings-page .db-info-item,body[data-lexforge-theme=dark] .settings-page input,body[data-lexforge-theme=dark] .settings-page select{background:#123547!important;color:#e9f8fa!important;border-color:#557d8e!important}
+body[data-lexforge-theme=dark] .settings-approved{background:#102b3a;color:#eaf7f8}body[data-lexforge-theme=dark] .lsa-topbar,body[data-lexforge-theme=dark] .lsa-rail,body[data-lexforge-theme=dark] .lsa-card,body[data-lexforge-theme=dark] .lsa-about{background:#183b4c;color:#eaf7f8;border-color:#466d7d}body[data-lexforge-theme=dark] .lsa-row,body[data-lexforge-theme=dark] .lsa-key{border-color:#466d7d}body[data-lexforge-theme=dark] .lsa-key,body[data-lexforge-theme=dark] .lsa-rail button.active{background:#244759}body[data-lexforge-theme=dark] .lsa-section h2,body[data-lexforge-theme=dark] .lsa-row h3,body[data-lexforge-theme=dark] .lsa-key h3,body[data-lexforge-theme=dark] .lsa-theme-card h3,body[data-lexforge-theme=dark] .lsa-about h3{color:#effcfd}body[data-lexforge-theme=dark] .lsa-row p,body[data-lexforge-theme=dark] .lsa-key p,body[data-lexforge-theme=dark] .lsa-about small{color:#b5d2da}body[data-lexforge-theme=dark] .lsa-row input,body[data-lexforge-theme=dark] .lsa-row select,body[data-lexforge-theme=dark] .lsa-key label{background:#123547;color:#e9f8fa;border-color:#557d8e}body[data-lexforge-theme=dark] .lsa-danger{background:#3b292b;border-color:#8d5d59}body[data-lexforge-theme=dark] .lsa-danger b{color:#ffe7e2}body[data-lexforge-theme=dark] .lsa-rail button{color:#c7e2e8}
+
+/* The appearance control applies to every page, including approved layouts. */
+body[data-lexforge-theme=dark],
+body[data-lexforge-theme=dark] .main-content,
+body[data-lexforge-theme=dark] .lf-dashboard-main,
+body[data-lexforge-theme=dark] :is(.lf-dashboard,.vocab-page,.groups-page,.progress-page,.schedule-approved,.lf-help,.lf-ai-approved,.lf-flashcard,.lf-training-page,.lf-zombie-approved) {
+  background-color:#0d2635!important;
+  color:#eaf7f8;
+}
+body[data-lexforge-theme=dark] :is(.lf-dashboard,.vocab-page,.groups-page) {
+  --bg-primary:#0d2635;--bg-secondary:#193b4c;--bg-card:#193b4c;--bg-hover:#254d5e;
+  --border:#456b7c;--border-bright:#72a8b8;--text-primary:#effcfd;
+  --text-secondary:#c1dce3;--text-muted:#a4c3cd;
+}
+body[data-lexforge-theme=dark] :is(
+  .lf-vocab-workspace,.vocab-toolbar,.vocab-content,.lf-vocab-results,.lf-groups-toolbar,.group-card,
+  .lf-progress-insight,.prog-tab,.prog-content>.card,.prog-row .card,.lf-progress-stage,
+  .lf-ai-panel,.lf-ai-modes>button,.lf-ai-groups>button,.lf-ai-ready,
+  .lf-multiplayer-setup-grid>.card,.lf-multiplayer-games-panel,.lf-multiplayer-games>div,
+  .lf-typing-page .tg-select-content>.card,.lf-typing-rules,
+  .lf-training-page .card,.lf-training-page .mp4-card,.fc-config-card,.fc-result-card,
+  .lf-help-topic,.lf-help-step,.lf-help-layout nav,.lf-schedule-word
+) {background:#193b4c!important;color:#eaf7f8!important;border-color:#456b7c!important;}
+body[data-lexforge-theme=dark] :is(
+  .words-table th,.word-row,.word-row:nth-child(even),.lf-vocab-search,
+  .lf-progress-empty,.lf-progress-stage.basic,.lf-progress-stage.learning,.lf-progress-stage.known,
+  .lf-multiplayer-status,.lf-multiplayer-guide-strip,.lf-ai-key-warning,
+  .lf-help-question button,.lf-help-search,.lf-schedule-filters,.prog-tabs
+) {background:#244759!important;color:#eaf7f8!important;border-color:#52798a!important;}
+body[data-lexforge-theme=dark] :is(
+  .vocab-page,.groups-page,.progress-page,.lf-ai-approved,.lf-training-page,.lf-help,.schedule-approved
+) :is(input,select,textarea,.input,.select,.textarea) {background:#123547!important;color:#f0fbfd!important;border-color:#557d8e!important;}
+body[data-lexforge-theme=dark] :is(input,textarea)::placeholder {color:#a7c7d0;opacity:1;}
+body[data-lexforge-theme=dark] .progress-page .prog-tab.active {background:linear-gradient(120deg,#0b6178,#0c8290)!important;color:#fff!important;}
+body[data-lexforge-theme=dark] :is(.lf-vocab-topbar,.lf-groups-topbar,.lf-progress-topbar,.lf-ai-topbar,.lsa-topbar,.lf-dash-topbar,.lf-schedule-topbar,.lf-help-topbar) {background:#183b4c!important;color:#eaf7f8!important;border-color:#456b7c!important;}
+body[data-lexforge-theme=dark] :is(.lf-ai-modes>button.active,.lf-ai-groups>button.active,.lf-help-layout nav button.active) {background:#215d61!important;color:#f1fffd!important;border-color:#46b7ad!important;}
+body[data-lexforge-theme=dark] :is(.lf-progress-insight,.lf-progress-stage,.lf-ai-panel,.lf-multiplayer-games-panel) :is(p,small) {color:#bfd9e1!important;}
+body[data-lexforge-theme=dark] :is(.lf-vocab-search,.lf-groups-toolbar,.lf-ai-panel,.lf-schedule-filters) :is(input,select) {background:#123547!important;color:#f0fbfd!important;border-color:#557d8e!important;}
+
+/* Keep foreground and surface paired: these panels had pale backgrounds with light text. */
+body[data-lexforge-theme=dark] .lf-schedule .lf-schedule-word {
+  background:#193b4c!important;color:#eaf7f8!important;border-color:#547b8c!important;
+}
+body[data-lexforge-theme=dark] .lf-schedule-word :is(.lf-schedule-english,.lf-schedule-vietnamese,strong,b) {color:#f1fcfd!important;}
+body[data-lexforge-theme=dark] .lf-schedule-word :is(small,span) {color:#bad4dd!important;}
+body[data-lexforge-theme=dark] .lf-schedule-list>div:first-child,
+body[data-lexforge-theme=dark] .lf-schedule-pagination {background:#244759!important;color:#eaf7f8!important;}
+
+body[data-lexforge-theme=dark] :is(
+  .lf-listening-guide,.lf-listening-step,
+  .lf-typing-page .tg-select-content>.card,.lf-typing-rules,.lf-typing-rule,.lf-typing-score-rules span,
+  .lf-monster-page .lf-monster-left .form-group,.lf-monster-bestiary,.lf-monster-bestiary>div:nth-child(2)>div,.lf-monster-tiers,.lf-monster-rules,
+  .lf-memory-page .form-group,.lf-memory-guide,.lf-memory-example span,.lf-memory-how,
+  .lf-zombie-setup>section,.lf-zombie-setup>aside,.lf-zombie-status,.lf-zombie-how>div,.lf-zombie-enemies>div,
+  .lf-multiplayer-setup-grid>.card,.lf-multiplayer-games-panel
+) {background:#193b4c!important;color:#eaf7f8!important;border-color:#547b8c!important;}
+body[data-lexforge-theme=dark] :is(
+  .lf-typing-page .mode-btn,.lf-typing-page .group-select-btn,.lf-typing-page .diff-btn,
+  .lf-memory-page .diff-btn,.lf-memory-page .group-select-btn,
+  .lf-monster-page .lf-monster-lang button,.lf-monster-page .lf-monster-groups button,
+  .lf-multiplayer-page .game-select-btn,.lf-multiplayer-games>div
+) {background:#244759!important;color:#eaf7f8!important;border-color:#648b9a!important;}
+body[data-lexforge-theme=dark] :is(
+  .lf-typing-page .mode-btn.active,.lf-memory-page .diff-btn.active,
+  .lf-monster-page .lf-monster-lang button[aria-pressed=true],.lf-monster-page .lf-monster-groups button[aria-pressed=true]
+) {background:#205c69!important;color:#fff!important;border-color:#71d0df!important;}
+body[data-lexforge-theme=dark] :is(
+  .lf-listening-guide,.lf-listening-step,.lf-typing-rules,.lf-typing-rule,.lf-typing-score-rules span,
+  .lf-monster-setup-card,.lf-monster-bestiary,.lf-monster-tiers,.lf-memory-guide,.lf-memory-example span,.lf-memory-how,
+  .lf-zombie-setup,.lf-multiplayer-setup-grid,.lf-multiplayer-games-panel
+) :is(h2,h3,h4,b,strong) {color:#f1fcfd!important;}
+body[data-lexforge-theme=dark] :is(
+  .lf-listening-guide,.lf-listening-step,.lf-typing-rules,.lf-monster-setup-card,.lf-memory-guide,.lf-zombie-setup,.lf-multiplayer-games-panel
+) :is(p,small,span) {color:#c1dce3!important;}
+body[data-lexforge-theme=dark] .lf-typing-page .mode-btn :is(b,small),
+body[data-lexforge-theme=dark] .lf-memory-page .diff-btn :is(b,strong,small),
+body[data-lexforge-theme=dark] .lf-monster-page :is(.lf-monster-lang button,.lf-monster-groups button) :is(b,span),
+body[data-lexforge-theme=dark] .lf-multiplayer-page .game-select-btn :is(b,small,span) {color:#effcfd!important;}
+body[data-lexforge-theme=dark] .lf-multiplayer-page .lf-mp-hero-card :is(b,small,span) {color:#12384b!important;}
+body[data-lexforge-theme=dark] :is(.lf-typing-rule i,.lf-memory-how i,.lf-zombie-how i,.lf-listening-step i) {color:#fff!important;}
+body[data-lexforge-theme=dark] .lf-monster-rules>div,
+body[data-lexforge-theme=dark] .lf-monster-rules .lf-monster-rule,
+body[data-lexforge-theme=dark] .lf-monster-tiers>div:first-child,
+body[data-lexforge-theme=dark] .lf-monster-bestiary>div:nth-child(2)>div>div,
+body[data-lexforge-theme=dark] .lf-zombie-status :is(strong,span) {color:#eaf7f8!important;}
+body[data-lexforge-theme=dark] .progress-page .prog-content .card [style*="var(--bg-secondary)"] {background:#244759!important;color:#eaf7f8!important;}
+
+/* The current schedule page uses sa-* classes. */
+body[data-lexforge-theme=dark] .schedule-approved {background:#0d2635!important;color:#eaf7f8!important;}
+body[data-lexforge-theme=dark] :is(.sa-topbar,.sa-planner,.sa-word,.sa-modal) {background:#193b4c!important;color:#f0fbfd!important;border-color:#547b8c!important;}
+body[data-lexforge-theme=dark] :is(.sa-toolbar,.sa-list-head,.sa-planner-foot,.sa-empty,.sa-search>div) {background:#244759!important;color:#eaf7f8!important;border-color:#52798a!important;}
+body[data-lexforge-theme=dark] .sa-word :is(strong,b,small),
+body[data-lexforge-theme=dark] .sa-planner-foot :is(b,small),
+body[data-lexforge-theme=dark] .sa-empty {color:#eaf7f8!important;}
+body[data-lexforge-theme=dark] .sa-word .sa-word-main>b,
+body[data-lexforge-theme=dark] .sa-word :is(.sa-risk small,.sa-when small) {color:#bed8e1!important;}
+body[data-lexforge-theme=dark] .sa-word .sa-risk strong {color:#ff8881!important;}
+body[data-lexforge-theme=dark] .sa-word.urgent {border-left-color:#e35252!important;}
+body[data-lexforge-theme=dark] .sa-word.high {border-left-color:#e9aa35!important;}
+body[data-lexforge-theme=dark] .sa-word.low {border-left-color:#14a082!important;}
+body[data-lexforge-theme=dark] .sa-toolbar :is(select,input,button:not(.active)) {background:#123547!important;color:#f0fbfd!important;border-color:#638b9b!important;}
+body[data-lexforge-theme=dark] .sa-priorities button.active {background:#0b7894!important;color:#fff!important;}
+body[data-lexforge-theme=dark] .sa-word:hover {background:#285164!important;}
+
+/* Progress overview: journey and stage tiles have their own light palette. */
+body[data-lexforge-theme=dark] .progress-page :is(.lf-progress-journey,.lf-progress-trend,.lf-progress-stages) {background:#193b4c!important;color:#eaf7f8!important;border-color:#547b8c!important;}
+body[data-lexforge-theme=dark] .progress-page :is(.lf-progress-journey>div:first-child>div strong,.lf-progress-journey>div:first-child>b,.lf-progress-trend h3,.lf-progress-stages h3) {color:#f1fcfd!important;}
+body[data-lexforge-theme=dark] .progress-page :is(.lf-progress-journey>div:first-child>b small,.lf-progress-trend p,.lf-progress-trend-total small) {color:#bbd7df!important;}
+body[data-lexforge-theme=dark] .progress-page .lf-progress-journey-track:before {background:#426879!important;}
+body[data-lexforge-theme=dark] .progress-page .lf-progress-journey-track>span {color:#c6dfe5!important;}
+body[data-lexforge-theme=dark] .progress-page .lf-progress-journey-track>span:not(.done) b {background:#254b5c!important;color:#f0fbfd!important;border-color:#729bac!important;}
+body[data-lexforge-theme=dark] .progress-page .lf-progress-stage-tiles .lf-progress-stage {background:#244759!important;border-color:#638b9b!important;}
+body[data-lexforge-theme=dark] .progress-page .lf-progress-stage-tiles .lf-progress-stage :is(span,span b,strong) {color:#f0fbfd!important;}
+body[data-lexforge-theme=dark] .progress-page .lf-progress-stage-tiles .lf-progress-stage>i {background:#456d7c!important;}
+
+/* Text that the approved light layouts color explicitly. */
+body[data-lexforge-theme=dark] :is(.lf-multiplayer-intro,.lf-memory-intro,.lf-typing-intro,.lf-monster-setup-title p,.lf-monster-bestiary-title p,.lf-progress-overview-heading p) {color:#bdd8e2!important;}
+body[data-lexforge-theme=dark] :is(.lf-training-page .form-label,.lf-typing-page .form-label,.lf-memory-page .form-label,.lf-monster-page .form-label,.lf-progress-overview-heading h2,.lf-monster-setup-title h3,.lf-monster-bestiary-title h3) {color:#f2fcfd!important;}
+body[data-lexforge-theme=dark] .lf-multiplayer-status {background:#244759!important;color:#f0fbfd!important;border-color:#648b9a!important;}
+body[data-lexforge-theme=dark] .lf-multiplayer-status i {color:#62d6df!important;}
+body[data-lexforge-theme=dark] .lf-multiplayer-page .input {background:#123547!important;color:#f0fbfd!important;}
+
+body[data-lexforge-theme=dark] .lf-progress-game-score {background:#244759!important;color:#eaf7f8!important;border-color:#638b9b!important;}
+body[data-lexforge-theme=dark] .lf-progress-game-score>div:first-child {color:#c0dce4!important;}
+body[data-lexforge-theme=dark] .lf-progress-overview-heading>b {background:#244759!important;color:#eaf7f8!important;border-color:#638b9b!important;}
+
+body[data-lexforge-theme=dark] :is(.lf-memory-page .diff-btn,.lf-memory-page .group-select-btn) :is(.lf-memory-difficulty-name,strong,.lf-memory-difficulty-time,.group-count) {color:#eaf7f8!important;}
+body[data-lexforge-theme=dark] .lf-memory-difficulty-time {color:#b9d5df!important;}
+body[data-lexforge-theme=dark] .lf-memory-page .group-select-btn span[style] {color:#bdd9e3!important;}
+body[data-lexforge-theme=dark] .lf-memory-page .form-group {background:#1b4153!important;}
+
+body[data-lexforge-theme=dark] .lf-monster-page .lf-monster-left .form-label,
+body[data-lexforge-theme=dark] .lf-typing-page .form-label,
+body[data-lexforge-theme=dark] .lf-memory-page .form-label {color:#f2fcfd!important;}
+body[data-lexforge-theme=dark] .lf-typing-page .lang-btns .mode-btn small,
+body[data-lexforge-theme=dark] .lf-typing-page .group-count,
+body[data-lexforge-theme=dark] .lf-monster-page .lf-monster-groups button>span:nth-child(3) {color:#bdd9e3!important;}
+body[data-lexforge-theme=dark] .lf-typing-score-rules :is(b,small) {color:#f1fcfd!important;}
+body[data-lexforge-theme=dark] .lf-zombie-how i {background:#147c5b!important;color:#fff!important;}
+body[data-lexforge-theme=dark] .lf-monster-rule>span {background:#147c5b!important;color:#fff!important;}
+body[data-lexforge-theme=dark] .lf-monster-rule p {color:#eaf7f8!important;}
+
+body[data-lexforge-theme=dark] .lf-flashcard.fc-select :is(.fc-config-card,.srs-info) {background:#193b4c!important;color:#eaf7f8!important;border-color:#547b8c!important;}
+body[data-lexforge-theme=dark] .lf-flashcard.fc-select .config-section .form-label {color:#ffd276!important;}
+body[data-lexforge-theme=dark] .lf-flashcard.fc-select :is(.mode-btn,.group-select-btn) {background:#244759!important;color:#f0fbfd!important;border-color:#638b9b!important;}
+body[data-lexforge-theme=dark] .lf-flashcard.fc-select :is(.mode-btn.active,.group-select-btn.active) {background:#205c69!important;border-color:#71d0df!important;}
+body[data-lexforge-theme=dark] .lf-flashcard.fc-select :is(.mode-btn,.group-select-btn) :is(strong,small,.group-count) {color:#eaf7f8!important;}
+
+body[data-lexforge-theme=dark] .lf-groups-toolbar label>span,
+body[data-lexforge-theme=dark] .sa-toolbar :is(label,.sa-priorities,.sa-priorities>span) {color:#d8edf2!important;}
+body[data-lexforge-theme=dark] :is(.lf-groups-toolbar,.vocab-page .vocab-toolbar,.lf-vocab-search) {background:#244759!important;color:#eaf7f8!important;border-color:#638b9b!important;}
+body[data-lexforge-theme=dark] :is(.lf-groups-toolbar,.vocab-page .vocab-toolbar,.lf-vocab-search,.sa-toolbar) input::placeholder {color:#bed8e1!important;opacity:1;}

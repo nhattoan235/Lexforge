@@ -1,8 +1,10 @@
 // src/pages/TypingGamePage.tsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { notify } from '../components/Feedback/ToastHost';
 import { db } from '../services/database';
 import { speechService } from '../services/speech';
 import { Word, WordGroup } from '../types';
+import './TypingApproved.css';
 
 type GameState = 'select' | 'playing' | 'result';
 type InputLang = 'en' | 'vi';
@@ -37,7 +39,7 @@ export default function TypingGamePage() {
       ? await db.getWordsByGroups(selectedGroups)
       : await db.getWords();
 
-    if (!res.success || !res.data?.length) { alert('Không có từ nào!'); return; }
+    if (!res.success || !res.data?.length) { notify('Chưa có từ để bắt đầu. Hãy thêm từ vào thư viện trước nhé.', 'info'); return; }
 
     const shuffled = [...res.data].sort(() => Math.random() - 0.5);
     setWords(shuffled);
@@ -135,25 +137,27 @@ export default function TypingGamePage() {
 
   if (gameState === 'select') {
     return (
-      <div className="tg-select">
-        <div className="page-header">
+      <div className="tg-select lf-training-page lf-typing-page">
+        <div className="page-header lf-training-hero">
           <div>
-            <h1 className="page-title">Typing Race ⌨️</h1>
-            <p className="page-subtitle">Gõ từ vựng càng nhanh càng tốt — 60 giây!</p>
+            <span className="lf-training-eyebrow">TYPING RACE · 60 GIÂY</span><h1 className="page-title">Gõ nhanh. <em>Nhớ sâu.</em></h1>
+            <p className="page-subtitle">Nhìn nghĩa, gọi lại từ trong đầu và <strong>chạm tay vào phản xạ.</strong></p>
+            <div className="lf-training-tags"><span>60 giây</span><span>Combo điểm</span><span>Hai chiều Anh – Việt</span></div>
           </div>
+          <div className="lf-typing-keyboard" aria-hidden="true">{['A','S','D','F','J','K','L','↵'].map(key => <i key={key}>{key}</i>)}</div>
         </div>
         <div className="tg-select-content">
-          <div className="card" style={{ maxWidth: 520 }}>
-            <h3 style={{ marginBottom: 20 }}>⚙️ Cài Đặt Game</h3>
+          <div className="card" style={{ maxWidth: 'none' }}>
+            <h3 style={{ marginBottom: 6 }}>Chuẩn bị đường đua</h3><p className="lf-typing-intro">Chọn chiều gõ và những nhóm từ bạn muốn luyện.</p>
             <div className="form-group" style={{ marginBottom: 16 }}>
-              <label className="form-label">Bạn gõ bằng ngôn ngữ nào?</label>
+              <label className="form-label"><i>1</i> Bạn sẽ gõ ngôn ngữ nào?</label>
               <div className="lang-btns">
-                <button className={`mode-btn ${inputLang === 'en' ? 'active' : ''}`} onClick={() => setInputLang('en')}>🇺🇸 Gõ Tiếng Anh</button>
-                <button className={`mode-btn ${inputLang === 'vi' ? 'active' : ''}`} onClick={() => setInputLang('vi')}>🇻🇳 Gõ Tiếng Việt</button>
+                <button className={`mode-btn ${inputLang === 'en' ? 'active' : ''}`} onClick={() => setInputLang('en')}><b>Gõ tiếng Anh</b><small>Nhìn nghĩa tiếng Việt</small></button>
+                <button className={`mode-btn ${inputLang === 'vi' ? 'active' : ''}`} onClick={() => setInputLang('vi')}><b>Gõ tiếng Việt</b><small>Nhìn từ tiếng Anh</small></button>
               </div>
             </div>
             <div className="form-group" style={{ marginBottom: 20 }}>
-              <label className="form-label">Nhóm từ (để trống = tất cả)</label>
+              <label className="form-label"><i>2</i> Chọn nhóm từ</label>
               <div className="group-select-grid">
                 {groups.map(g => (
                   <button key={g.Id} className={`group-select-btn ${selectedGroups.includes(g.Id) ? 'active' : ''}`} style={{ '--group-color': g.Color } as any} onClick={() => toggleGroup(g.Id)}>
@@ -164,17 +168,9 @@ export default function TypingGamePage() {
                 ))}
               </div>
             </div>
-            <div className="rules-box">
-              <h4>📜 Luật chơi</h4>
-              <ul>
-                <li>Thấy nghĩa → gõ từ vựng tương ứng → Enter</li>
-                <li>Đúng: +10 điểm, combo 3: +15, combo 5+: +20</li>
-                <li>Sai: mất streak, không bị trừ điểm</li>
-                <li>Thời gian: 60 giây</li>
-              </ul>
-            </div>
-            <button className="btn btn-primary btn-lg w-full" onClick={startGame}>▶ Bắt Đầu!</button>
+            <div className="lf-typing-launch"><div><strong>Sẵn sàng trong 60 giây?</strong><small>Đúng liên tiếp để tăng điểm combo.</small></div><button className="btn btn-primary btn-lg" onClick={startGame}>Bắt đầu chơi →</button></div>
           </div>
+          <aside className="lf-typing-rules"><h2>Cách chơi cực nhanh</h2><div className="lf-typing-rule-hero"><strong>60</strong><span>GIÂY BỨT TỐC</span></div><div className="lf-typing-rule"><i>1</i><b>Nhìn từ hoặc nghĩa hiện trên thẻ</b></div><div className="lf-typing-rule"><i>2</i><b>Gõ đáp án và nhấn Enter</b></div><div className="lf-typing-rule"><i>3</i><b>Đúng liên tiếp để tăng combo</b></div><div className="lf-typing-score-rules"><span><b>+10</b><small>Mỗi đáp án đúng</small></span><span><b>+15</b><small>Combo từ 3</small></span><span><b>+20</b><small>Combo từ 5</small></span></div></aside>
         </div>
         <style>{`
           .tg-select { padding-bottom: 32px; }
@@ -201,10 +197,10 @@ export default function TypingGamePage() {
   if (gameState === 'result') {
     const acc = totalTyped > 0 ? Math.round((correctCount / totalTyped) * 100) : 0;
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', padding: 32 }}>
-        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 20, padding: 40, maxWidth: 480, width: '100%', textAlign: 'center' }}>
+      <div className="lf-typing-result" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', padding: 32 }}>
+        <div className="lf-typing-result-card" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 20, padding: 40, maxWidth: 480, width: '100%', textAlign: 'center' }}>
           <div style={{ fontSize: 64, marginBottom: 16 }}>{score >= 200 ? '🏆' : score >= 100 ? '🥈' : '🥉'}</div>
-          <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 24 }}>Kết Quả!</h2>
+          <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 24 }}>Về đích!</h2><p>Mỗi từ bạn gọi lại được là một bước tiến.</p>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 32, marginBottom: 24 }}>
             {[['Điểm', score, '#6366f1'], ['Đúng', correctCount, '#10b981'], ['Streak Max', maxStreak, '#f59e0b'], ['Độ chính xác', `${acc}%`, '#ec4899']].map(([l, v, c]) => (
               <div key={l as string} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

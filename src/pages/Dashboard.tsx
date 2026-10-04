@@ -1,330 +1,137 @@
-// src/pages/Dashboard.tsx
-import React, { useState, useEffect } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { db } from '../services/database';
-import { getScheduleSummary } from '../services/database';
-import { useApp } from '../App';
-import { AppStats } from '../types';
+import React, { useEffect, useState } from 'react';
+import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { BookOpen, CheckCircle2, Clock3, Target, BookMarked, BadgeCheck, CalendarClock, Crosshair, Layers, Keyboard, Swords, CalendarDays, ArrowRight, Sparkles, Moon, Sun, TrendingUp } from 'lucide-react';
+import { db, getScheduleSummary } from '../services/database';
 import { aiVocabService, DEFAULT_TOPICS } from '../services/aiVocabService';
+import { useApp } from '../App';
+import { AppStats, Page } from '../types';
+import './Dashboard.css';
+import './DashboardApproved.css';
 
-export default function Dashboard() {
-  const { setPage, refreshTrigger } = useApp();
+type WeekDay = { day: string; correct: number; total: number };
+type AiBanner = { status: 'generating' | 'success'; topic: string; category: string; count?: number };
+
+export default function Dashboard({ onInitialLoad }: { onInitialLoad?: () => void }) {
+  const { setPage, refreshTrigger, theme, setTheme } = useApp();
   const [stats, setStats] = useState<AppStats | null>(null);
-  const [weeklyData, setWeeklyData] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [weeklyData, setWeeklyData] = useState<WeekDay[]>([]);
   const [scheduleSummary, setScheduleSummary] = useState<any>(null);
-  const [dailyVocabBanner, setDailyVocabBanner] = useState<any>(null);
+  const [dailyVocabBanner, setDailyVocabBanner] = useState<AiBanner | null>(null);
+  const [loading, setLoading] = useState(true);
+  const dark = theme === 'dark';
 
   useEffect(() => {
-    loadStats();
-    checkAndGenerateDailyVocab();
+    let active = true;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [statsRes, weeklyRes, summary] = await Promise.all([db.getStats(), db.getWeeklyStats(), getScheduleSummary()]);
+        if (!active) return;
+        if (statsRes.success && statsRes.data?.[0]) setStats(statsRes.data[0]);
+        if (weeklyRes.success) {
+          const labels = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+          const now = new Date();
+          setWeeklyData(Array.from({ length: 7 }, (_, index) => {
+            const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6 + index);
+            const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+            const found = weeklyRes.data?.find(row => row.StudyDate?.slice(0, 10) === dateKey);
+            return { day: labels[date.getDay()], correct: found?.Correct || 0, total: found?.Total || 0 };
+          }));
+        }
+        setScheduleSummary(summary);
+      } catch (error) {
+        console.error('Không tải được dữ liệu Dashboard:', error);
+      } finally {
+        if (active) {
+          setLoading(false);
+          onInitialLoad?.();
+        }
+      }
+    };
+    load();
+    return () => { active = false; };
   }, [refreshTrigger]);
 
-  const loadStats = async () => {
-    setLoading(true);
-    const [statsRes, weeklyRes] = await Promise.all([db.getStats(), db.getWeeklyStats()]);
-    if (statsRes.success && statsRes.data?.[0]) setStats(statsRes.data[0]);
-    if (weeklyRes.success) {
-      const days = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
-      const today = new Date();
-      const week = Array.from({ length: 7 }, (_, i) => {
-        const d = new Date(today);
-        d.setDate(today.getDate() - 6 + i);
-        const dateStr = d.toISOString().split('T')[0];
-        const found = weeklyRes.data?.find(w => w.StudyDate?.split('T')[0] === dateStr);
-        return { day: days[d.getDay()], correct: found?.Correct || 0, total: found?.Total || 0 };
-      });
-      setWeeklyData(week);
-    }
-    // Load schedule summary
-    const summary = await getScheduleSummary();
-    setScheduleSummary(summary);
-    setLoading(false);
-  };
-
-  const checkAndGenerateDailyVocab = async () => {
-    try {
-      // 1. Check if auto daily vocab is enabled
-      const autoRes = await db.getSetting('auto_daily_vocab');
-      const isEnabled = autoRes.success && autoRes.data?.[0] ? autoRes.data[0].SettingValue === 'true' : true;
-      if (!isEnabled) return;
-
-      // 2. Check if already generated today
-      const todayStr = new Date().toISOString().split('T')[0];
-      const lastDateRes = await db.getSetting('last_daily_vocab_date');
-      const lastDate = lastDateRes.success && lastDateRes.data?.[0]?.SettingValue;
-      if (lastDate === todayStr) return;
-
-      // 3. Check if API key is set
-      const keyRes = await db.getSetting('groq_api_key');
-      const apiKey = keyRes.success && keyRes.data?.[0]?.SettingValue;
-      if (!apiKey || apiKey.trim() === '') {
-        console.log('Auto daily vocab: Groq API Key is not configured.');
-        return;
+  useEffect(() => {
+    let active = true;
+    const generate = async () => {
+      try {
+        const autoRes = await db.getSetting('auto_daily_vocab');
+        const enabled = autoRes.success && autoRes.data?.[0] ? autoRes.data[0].SettingValue === 'true' : true;
+        if (!enabled) return;
+        const today = new Date().toISOString().slice(0, 10);
+        const lastDateRes = await db.getSetting('last_daily_vocab_date');
+        if (lastDateRes.data?.[0]?.SettingValue === today) return;
+        const keyRes = await db.getSetting('groq_api_key');
+        if (!keyRes.data?.[0]?.SettingValue?.trim()) return;
+        const catRes = await db.getSetting('daily_vocab_category');
+        const category = catRes.data?.[0]?.SettingValue || 'toeic';
+        const topics = DEFAULT_TOPICS[category] || DEFAULT_TOPICS.toeic;
+        const topic = topics[Math.floor(Math.random() * topics.length)];
+        if (active) setDailyVocabBanner({ status: 'generating', topic, category });
+        const words = await aiVocabService.generateWords(category, topic);
+        const saved = await aiVocabService.saveGeneratedWordsToDb(category, topic, words);
+        if (!active) return;
+        if (saved.success) {
+          await db.setSetting('last_daily_vocab_date', today);
+          setDailyVocabBanner({ status: 'success', topic, category, count: words.length });
+          const refreshed = await db.getStats();
+          if (refreshed.success && refreshed.data?.[0] && active) setStats(refreshed.data[0]);
+        } else setDailyVocabBanner(null);
+      } catch (error) {
+        console.error('Không tạo được từ vựng hằng ngày:', error);
+        if (active) setDailyVocabBanner(null);
       }
+    };
+    generate();
+    return () => { active = false; };
+  }, []);
 
-      // 4. Get preferred category
-      const catRes = await db.getSetting('daily_vocab_category');
-      const category = catRes.success && catRes.data?.[0]?.SettingValue ? catRes.data[0].SettingValue : 'toeic';
-
-      // 5. Pick a random topic
-      const topics = DEFAULT_TOPICS[category] || DEFAULT_TOPICS.toeic;
-      const randomTopic = topics[Math.floor(Math.random() * topics.length)];
-
-      console.log(`Auto generating daily vocab: Category = ${category}, Topic = ${randomTopic}`);
-      setDailyVocabBanner({ status: 'generating', topic: randomTopic, category });
-
-      // 6. Call API and save to DB
-      const words = await aiVocabService.generateWords(category, randomTopic);
-      const saveRes = await aiVocabService.saveGeneratedWordsToDb(category, randomTopic, words);
-
-      if (saveRes.success && saveRes.groupId) {
-        // 7. Update last_daily_vocab_date setting
-        await db.setSetting('last_daily_vocab_date', todayStr);
-        setDailyVocabBanner({
-          status: 'success',
-          topic: randomTopic,
-          category,
-          groupId: saveRes.groupId,
-          words,
-        });
-        
-        // Refresh stats so the new words show up in counters
-        const statsRes = await db.getStats();
-        if (statsRes.success && statsRes.data?.[0]) setStats(statsRes.data[0]);
-      } else {
-        setDailyVocabBanner(null);
-      }
-    } catch (err: any) {
-      console.error('Lỗi sinh từ vựng tự động hàng ngày:', err);
-      setDailyVocabBanner(null);
-    }
+  const toggleTheme = () => setTheme(dark ? 'light' : 'dark');
+  const goToDueReview = () => {
+    sessionStorage.setItem('lexforge-flashcard-intent', 'due');
+    setPage('flashcard');
   };
+  const go = (page: Page) => setPage(page);
+  const total = stats?.TotalWords || 0;
+  const mastered = stats?.MasteredWords || 0;
+  const due = stats?.DueWords || 0;
+  const weeklyCorrect = weeklyData.reduce((sum, day) => sum + day.correct, 0);
+  const hasActivity = weeklyData.some(day => day.total > 0);
+  const bestDay = weeklyData.reduce<WeekDay | null>((best, day) => !best || day.correct > best.correct ? day : best, null);
 
-  if (loading) return <div className="loading-screen"><div className="spinner" />Đang tải...</div>;
+  if (loading) return <div className="lf-dashboard-loading"><span />Đang tải dữ liệu học tập...</div>;
 
-  const accuracy = stats && stats.TotalWords > 0
-    ? Math.round((stats.MasteredWords / stats.TotalWords) * 100) : 0;
+  return <div className={`lf-dashboard${dark ? ' dark' : ''}`}>
+    <header className="lf-dash-topbar"><div><span>KHÔNG GIAN HỌC TẬP</span><b>Dashboard</b></div><button type="button" onClick={toggleTheme} aria-label={dark ? 'Chuyển sang chế độ sáng' : 'Chuyển sang chế độ tối'}>{dark ? <Sun size={18} /> : <Moon size={18} />}{dark ? 'Sáng' : 'Tối'}</button></header>
+    <div className="lf-dash-content">
+      <div className="lf-dash-heading"><div><span className="lf-dash-eyebrow">TỔNG QUAN HỌC TẬP</span><h1>Hôm nay mình học gì?</h1><p>Một bước nhỏ mỗi ngày giúp bạn nhớ từ lâu hơn.</p></div><button type="button" className="lf-dash-link" onClick={() => go('progress')}>Xem tiến độ chi tiết <ArrowRight size={16} /></button></div>
 
-  return (
-    <div className="dashboard">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Dashboard 📊</h1>
-          <p className="page-subtitle">Tổng quan tiến độ học tập của bạn</p>
-        </div>
-        <button className="btn btn-primary" onClick={() => setPage('flashcard')}>
-          ▶ Ôn Luyện Ngay
-        </button>
+      <section className="lf-dash-today"><div><small>VIỆC CẦN LÀM HÔM NAY</small><h2>{total === 0 ? 'Bắt đầu thư viện từ của bạn' : due > 0 ? `Bạn có ${due} từ cần ôn` : 'Hôm nay bạn đã theo kịp lịch ôn'}</h2><p>{total === 0 ? 'Tạo nhóm và thêm những từ đầu tiên để bắt đầu hành trình ghi nhớ.' : due > 0 ? 'Bắt đầu với những từ đến hạn để giữ nhịp học. Bạn có thể xem danh sách trước khi ôn.' : 'Bạn có thể tiếp tục luyện tập hoặc thêm từ mới vào thư viện.'}</p></div><div className="lf-dash-today-actions"><button type="button" className="lf-dash-primary" onClick={total === 0 ? () => go('groups') : due > 0 ? goToDueReview : () => go('vocabulary')}>{total === 0 ? 'Tạo nhóm từ' : due > 0 ? 'Bắt đầu ôn' : 'Học từ mới'} <ArrowRight size={16} /></button><button type="button" className="lf-dash-ghost" onClick={() => go('schedule')}>Xem lịch ôn</button></div></section>
+
+      {dailyVocabBanner && <section className={`lf-dash-ai ${dailyVocabBanner.status}`}><span className="lf-dash-ai-icon"><Sparkles size={23} /></span><div><b>{dailyVocabBanner.status === 'generating' ? 'AI đang chuẩn bị từ mới hôm nay' : 'AI đã thêm từ mới hôm nay'}</b><span>{dailyVocabBanner.category.toUpperCase()} · Chủ đề {dailyVocabBanner.topic}</span></div><strong className="lf-dash-ai-count">{dailyVocabBanner.status === 'success' ? `${dailyVocabBanner.count} từ mới` : 'Đang tạo'}</strong>{dailyVocabBanner.status === 'success' && <button type="button" className="lf-dash-link" onClick={() => go('groups')}>Xem nhóm <ArrowRight size={15} /></button>}</section>}
+
+      <div className="lf-dash-section-head"><h2>Tổng quan của bạn</h2><span>Cập nhật từ dữ liệu học tập</span></div>
+      <section className="lf-dash-stat-grid" aria-label="Các chỉ số học tập">
+        {[
+          { label: 'Tổng từ vựng', value: total, note: `Trong ${stats?.TotalGroups || 0} nhóm từ`, icon: BookMarked, tone: 'blue' },
+          { label: 'Đã thuộc', value: mastered, note: `${total ? Math.round(mastered / total * 100) : 0}% tổng số từ`, icon: BadgeCheck, tone: 'green' },
+          { label: 'Cần ôn hôm nay', value: due, note: 'Những từ đến lúc ôn lại', icon: CalendarClock, tone: 'amber' },
+          { label: 'Đúng hôm nay', value: stats?.TodayCorrect || 0, note: 'Lần trả lời đúng', icon: Crosshair, tone: 'pink' }
+        ].map(item => <div className={`lf-dash-stat ${item.tone}`} key={item.label}><div className="lf-dash-stat-top"><span className="lf-dash-stat-icon"><item.icon size={25} strokeWidth={2} /></span><span>{item.label}</span></div><strong>{item.value.toLocaleString('vi-VN')}</strong><small>{item.note}</small></div>)}
+      </section>
+
+      <div className="lf-dash-grid-main">
+        <section className="lf-dash-panel"><div className="lf-dash-panel-head"><div><h2>Hoạt động 7 ngày</h2><p>Mỗi cột cho thấy tổng lượt luyện và số câu đúng</p></div><TrendingUp size={20} /></div><div className="lf-dash-chart-highlight"><strong>{weeklyCorrect}</strong><span>câu trả lời đúng trong 7 ngày{hasActivity && bestDay ? <><br/><b>Ngày học tốt nhất: {bestDay.day}</b></> : null}</span></div>{hasActivity ? <div className="lf-dash-chart"><ResponsiveContainer width="100%" height="100%"><BarChart data={weeklyData} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}><XAxis dataKey="day" tick={{ fill: dark ? '#aec4cf' : '#5b7180', fontSize: 12 }} axisLine={false} tickLine={false} /><YAxis tick={{ fill: dark ? '#aec4cf' : '#5b7180', fontSize: 11 }} axisLine={false} tickLine={false} /><Tooltip contentStyle={{ background: dark ? '#132a39' : '#fff', color: dark ? '#eaf5f8' : '#10293b', border: '1px solid #a8cbd6', borderRadius: 9 }} /><Bar dataKey="total" name="Tổng" fill={dark ? '#31596c' : '#b3d7e2'} radius={[4,4,0,0]} /><Bar dataKey="correct" name="Đúng" fill={dark ? '#65c9e8' : '#0b7898'} radius={[4,4,0,0]} /></BarChart></ResponsiveContainer></div> : <div className="lf-dash-chart-empty"><b>Chưa có hoạt động trong 7 ngày</b><span>Ôn vài từ để bắt đầu biểu đồ của bạn.</span><button type="button" onClick={() => go('flashcard')}>Mở Flashcard <ArrowRight size={14} /></button></div>}<button type="button" className="lf-dash-link" onClick={() => go('progress')}>Xem phân tích 30 ngày <ArrowRight size={15} /></button></section>
+        <section className="lf-dash-panel"><div className="lf-dash-panel-head"><div><h2>Truy cập nhanh</h2><p>Chọn cách học bạn muốn bắt đầu</p></div></div><div className="lf-dash-actions">{[
+          { page: 'flashcard' as Page, label: 'Flashcard', description: 'Lật thẻ ôn từ', icon: Layers },
+          { page: 'typing-game' as Page, label: 'Gõ chữ tốc độ', description: 'Gõ chữ tích điểm', icon: Keyboard },
+          { page: 'monster-game' as Page, label: 'Đánh quái', description: 'Game từ vựng', icon: Swords },
+          { page: 'vocabulary' as Page, label: 'Thêm từ', description: 'Mở rộng bộ từ cá nhân', icon: BookOpen }
+        ].map(action => <button type="button" key={action.page} onClick={() => go(action.page)}><span className="lf-dash-action-icon"><action.icon size={21} /></span><span><b>{action.label}</b><small>{action.description}</small></span><ArrowRight size={17} /></button>)}</div></section>
       </div>
 
-      <div className="dashboard-content">
-        {/* Daily Vocab Banner */}
-        {dailyVocabBanner && (
-          <div style={{
-            background: dailyVocabBanner.status === 'generating' ? 'rgba(99,102,241,0.06)' : 'rgba(16,185,129,0.06)',
-            border: `1.5px solid ${dailyVocabBanner.status === 'generating' ? 'rgba(99,102,241,0.2)' : 'rgba(16,185,129,0.2)'}`,
-            borderRadius: 12, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16,
-            marginBottom: 10, position: 'relative', overflow: 'hidden'
-          }}>
-            <div style={{ fontSize: 28 }}>{dailyVocabBanner.status === 'generating' ? '⏳' : '🪄'}</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
-                {dailyVocabBanner.status === 'generating' 
-                  ? `Đang chuẩn bị từ vựng hàng ngày bằng AI...` 
-                  : `Hôm nay hệ thống đã tự động thêm 10 từ mới bằng AI!`}
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
-                Chương trình: <strong style={{ color: 'var(--accent-bright)' }}>{dailyVocabBanner.category.toUpperCase()}</strong> · Chủ đề: <strong style={{ color: 'var(--text-primary)' }}>{dailyVocabBanner.topic}</strong>
-              </div>
-            </div>
-            {dailyVocabBanner.status === 'success' && (
-              <button 
-                className="btn btn-primary" 
-                onClick={() => setPage('flashcard')}
-                style={{ padding: '8px 16px', fontSize: 13 }}
-              >
-                Học Ngay →
-              </button>
-            )}
-            <div style={{
-              position: 'absolute', bottom: -20, right: -20, width: 60, height: 60, borderRadius: '50%',
-              background: dailyVocabBanner.status === 'generating' ? '#6366f1' : '#10b981',
-              filter: 'blur(24px)', opacity: 0.12
-            }} />
-          </div>
-        )}
-        {/* Stats Grid */}
-        <div className="stats-grid">
-          {[
-            { label: 'Tổng Từ Vựng', value: stats?.TotalWords || 0, icon: '📖', color: '#6366f1', sub: `${stats?.TotalGroups || 0} nhóm` },
-            { label: 'Đã Thuộc', value: stats?.MasteredWords || 0, icon: '✅', color: '#10b981', sub: `${accuracy}% tổng số` },
-            { label: 'Cần Ôn Hôm Nay', value: stats?.DueWords || 0, icon: '⏰', color: '#f59e0b', sub: 'từ SRS' },
-            { label: 'Đúng Hôm Nay', value: stats?.TodayCorrect || 0, icon: '🎯', color: '#ec4899', sub: 'lần trả lời đúng' },
-          ].map((s, i) => (
-            <div key={i} className="stat-card" style={{ '--accent-color': s.color } as any}>
-              <div className="stat-icon">{s.icon}</div>
-              <div className="stat-value">{s.value.toLocaleString()}</div>
-              <div className="stat-label">{s.label}</div>
-              <div className="stat-sub">{s.sub}</div>
-              <div className="stat-glow" />
-            </div>
-          ))}
-        </div>
-
-        <div className="dashboard-row">
-          {/* Weekly Chart */}
-          <div className="card chart-card">
-            <h3 className="card-title">📈 Hoạt Động 7 Ngày</h3>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={weeklyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <XAxis dataKey="day" stroke="#475569" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                <YAxis stroke="#475569" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                <Tooltip
-                  contentStyle={{ background: '#1a1a35', border: '1px solid rgba(99,102,241,0.2)', borderRadius: '8px' }}
-                  labelStyle={{ color: '#f1f5f9' }}
-                />
-                <Bar dataKey="correct" name="Đúng" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="total" name="Tổng" fill="rgba(99,102,241,0.2)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Quick Actions */}
-          <div className="card quick-actions">
-            <h3 className="card-title">⚡ Truy Cập Nhanh</h3>
-            <div className="action-list">
-              {[
-                { page: 'flashcard', icon: '🃏', label: 'Flashcard', desc: 'Lật thẻ ôn từ' },
-                { page: 'typing-game', icon: '⌨️', label: 'Typing Race', desc: 'Gõ chữ tích điểm' },
-                { page: 'monster-game', icon: '⚔️', label: 'Đánh Quái', desc: 'Game từ vựng' },
-                { page: 'vocabulary', icon: '➕', label: 'Thêm Từ', desc: 'Thêm từ mới' },
-              ].map((a, i) => (
-                <button key={i} className="action-item" onClick={() => setPage(a.page as any)}>
-                  <div className="action-icon">{a.icon}</div>
-                  <div>
-                    <div className="action-label">{a.label}</div>
-                    <div className="action-desc">{a.desc}</div>
-                  </div>
-                  <span className="action-arrow">→</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* High Scores */}
-        <div className="card">
-          <h3 className="card-title">🏆 Điểm Cao Nhất</h3>
-          <div className="scores-row">
-            <div className="score-item">
-              <div className="score-icon">⌨️</div>
-              <div className="score-label">Typing Race</div>
-              <div className="score-value">{(stats?.BestTypingScore || 0).toLocaleString()}</div>
-            </div>
-            <div className="score-divider" />
-            <div className="score-item">
-              <div className="score-icon">⚔️</div>
-              <div className="score-label">Đánh Quái</div>
-              <div className="score-value">{(stats?.BestMonsterScore || 0).toLocaleString()}</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Schedule Widget */}
-        {scheduleSummary && scheduleSummary.total > 0 && (
-          <div
-            onClick={() => setPage('schedule')}
-            style={{
-              background: 'var(--bg-card)', border: '1px solid var(--border)',
-              borderRadius: 'var(--radius)', padding: '20px 24px',
-              cursor: 'pointer', transition: 'border-color 0.2s',
-              display: 'flex', alignItems: 'center', gap: 20,
-            }}
-            onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(99,102,241,0.5)')}
-            onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
-          >
-            <div style={{ fontSize: 36 }}>📅</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>🧠 Lịch Ôn Tập AI</div>
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                Hệ thống phát hiện{' '}
-                {scheduleSummary.urgent > 0 && (
-                  <span style={{ color: '#ef4444', fontWeight: 700 }}>{scheduleSummary.urgent} từ cấp tốc</span>
-                )}
-                {scheduleSummary.urgent > 0 && scheduleSummary.high_count > 0 && ', '}
-                {scheduleSummary.high_count > 0 && (
-                  <span style={{ color: '#f97316', fontWeight: 700 }}>{scheduleSummary.high_count} từ ưu tiên</span>
-                )}
-                {scheduleSummary.urgent === 0 && scheduleSummary.high_count === 0 && (
-                  <span style={{ color: '#10b981', fontWeight: 700 }}>trí nhớ đang tốt ✨</span>
-                )}
-              </div>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
-              {scheduleSummary.urgent > 0 && (
-                <span style={{
-                  padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700,
-                  background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)',
-                }}>🔴 {scheduleSummary.urgent} cấp tốc</span>
-              )}
-              {scheduleSummary.high_count > 0 && (
-                <span style={{
-                  padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600,
-                  background: 'rgba(249,115,22,0.15)', color: '#f97316', border: '1px solid rgba(249,115,22,0.3)',
-                }}>🟠 {scheduleSummary.high_count} ưu tiên</span>
-              )}
-            </div>
-            <span style={{ color: 'var(--text-muted)', fontSize: 18 }}>→</span>
-          </div>
-        )}
-      </div>
-
-      <style>{`
-        .dashboard { padding-bottom: 32px; }
-        .dashboard-content { padding: 24px 32px; display: flex; flex-direction: column; gap: 20px; }
-        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-        .stat-card {
-          background: var(--bg-card); border: 1px solid var(--border);
-          border-radius: var(--radius); padding: 20px; position: relative;
-          overflow: hidden; cursor: default; transition: border-color 0.2s;
-        }
-        .stat-card:hover { border-color: var(--accent-color, var(--border-bright)); }
-        .stat-icon { font-size: 28px; margin-bottom: 12px; }
-        .stat-value { font-size: 32px; font-weight: 700; color: var(--accent-color); }
-        .stat-label { font-size: 14px; font-weight: 500; margin-top: 4px; }
-        .stat-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
-        .stat-glow {
-          position: absolute; bottom: -30px; right: -30px; width: 80px; height: 80px;
-          background: var(--accent-color); border-radius: 50%; filter: blur(30px); opacity: 0.15;
-        }
-        .dashboard-row { display: grid; grid-template-columns: 1fr 340px; gap: 16px; }
-        .chart-card { }
-        .card-title { font-size: 15px; font-weight: 600; margin-bottom: 16px; }
-        .quick-actions { }
-        .action-list { display: flex; flex-direction: column; gap: 4px; }
-        .action-item {
-          display: flex; align-items: center; gap: 12px;
-          padding: 10px 12px; border-radius: var(--radius-sm);
-          background: none; border: none; width: 100%; text-align: left;
-          cursor: pointer; transition: background 0.2s; color: var(--text-primary);
-          font-family: inherit;
-        }
-        .action-item:hover { background: var(--bg-hover); }
-        .action-icon { font-size: 20px; width: 32px; text-align: center; }
-        .action-label { font-size: 14px; font-weight: 500; }
-        .action-desc { font-size: 12px; color: var(--text-secondary); }
-        .action-arrow { margin-left: auto; color: var(--text-muted); }
-        .scores-row { display: flex; align-items: center; justify-content: center; gap: 40px; padding: 16px 0; }
-        .score-item { text-align: center; }
-        .score-icon { font-size: 32px; margin-bottom: 8px; }
-        .score-label { font-size: 13px; color: var(--text-secondary); }
-        .score-value { font-size: 28px; font-weight: 700; color: var(--accent-bright); font-family: 'JetBrains Mono', monospace; }
-        .score-divider { width: 1px; height: 80px; background: var(--border); }
-        .loading-screen { display: flex; align-items: center; justify-content: center; gap: 12px; height: 100vh; font-size: 16px; color: var(--text-secondary); }
-        .spinner { width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-      `}</style>
+      <div className="lf-dash-bottom-grid"><section className="lf-dash-panel"><div className="lf-dash-panel-head"><div><h2>Điểm cao nhất</h2><p>Thành tích trong các trò chơi từ vựng</p></div></div><div className="lf-dash-scores"><div><span><Keyboard size={21} /></span><small>Gõ chữ tốc độ</small><b>{(stats?.BestTypingScore || 0).toLocaleString('vi-VN')}</b></div><i /><div><span><Swords size={21} /></span><small>Đánh quái</small><b>{(stats?.BestMonsterScore || 0).toLocaleString('vi-VN')}</b></div></div></section><section className="lf-dash-panel"><div className="lf-dash-panel-head"><div><h2>Lịch ôn tập AI</h2><p>Ưu tiên những từ có nguy cơ quên</p></div><button type="button" className="lf-dash-link" onClick={() => go('schedule')}>Mở lịch <ArrowRight size={15} /></button></div><div className="lf-dash-schedule"><span><CalendarDays size={25} /></span><div><b>{scheduleSummary?.total > 0 ? `${scheduleSummary.total} từ trong lịch ôn` : 'Chưa có từ cần chú ý'}</b><small>{scheduleSummary?.total > 0 ? 'Xem danh sách và chọn phiên ôn phù hợp' : 'Tiếp tục học để xây dựng lịch ôn của bạn'}</small><div>{scheduleSummary?.urgent > 0 && <em>{scheduleSummary.urgent} cấp tốc</em>}{scheduleSummary?.high_count > 0 && <em>{scheduleSummary.high_count} ưu tiên</em>}</div></div></div></section></div>
     </div>
-  );
+  </div>;
 }

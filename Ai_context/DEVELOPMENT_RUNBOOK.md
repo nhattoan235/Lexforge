@@ -42,10 +42,10 @@ Nếu không thấy nhãn, mở bảng trợ lý để đọc thông báo trạn
 
 ### Thử hỗ trợ viết nhanh
 
-1. Trong Notepad hoặc ô soạn thảo ChatGPT, gõ một câu sai ngữ pháp như `She go to school every day.` rồi ngừng gõ khoảng một giây. Nếu Groq xác định có lỗi, bảng **Gợi ý viết** sẽ hiện câu đã sửa.
+1. Trong Notepad hoặc ô soạn thảo ChatGPT, gõ `I went home. She go to school every day.` và để con trỏ ở cuối. Sau khi ngừng gõ, bảng **Gợi ý viết** phải hiển thị **Câu sẽ thay** là `She go to school every day.` và chỉ đề xuất sửa câu đó. Thử đặt con trỏ trong câu đầu rồi chỉnh một ký tự để xác nhận trợ lý chuyển sang câu chứa con trỏ.
 2. Bấm **× Bỏ qua**; bảng đóng. Sửa câu một chút rồi ngừng gõ để xem gợi ý mới. Bấm **✓ Áp dụng** và xác nhận đúng dòng gốc được thay thế trong ứng dụng đang viết.
-3. Khi bảng gợi ý hiện, bấm **Việt → Anh**, nhập một ý tiếng Việt và bấm **Dịch sang tiếng Anh**. Kết quả hiện bên dưới. Bấm **Chèn vào nơi đang viết** và kiểm tra vị trí chèn.
-4. Đổi nội dung dòng gốc trước khi bấm áp dụng: ứng dụng phải từ chối bản đề xuất cũ. Đổi vị trí con trỏ trước khi bấm chèn: ứng dụng phải từ chối vị trí cũ. Thử cả trường hợp trợ lý tắt.
+3. Khi bảng gợi ý hiện, bấm **Việt → Anh**, nhập một ý tiếng Việt và bấm **Dịch sang tiếng Anh**. Kết quả hiện bên dưới. Bấm **Thay câu đang viết** và kiểm tra dòng gốc được thay hoàn toàn, không nối thêm.
+4. Đổi nội dung dòng gốc trước khi bấm áp dụng: ứng dụng phải từ chối bản đề xuất cũ. Đổi nội dung dòng gốc trước khi bấm thay câu: ứng dụng phải từ chối bản dịch cũ. Thử cả trường hợp trợ lý tắt.
 
 Luồng viết nhanh chỉ gửi dòng tiếng Anh đang gõ sau khoảng 1,1 giây ổn định; ô nhập Việt → Anh chỉ gửi khi bấm dịch. Việc áp dụng qua UI Automation và `SendInput` cần xác nhận riêng trên từng ứng dụng. Nếu ứng dụng không hỗ trợ, bảng nhập/dán của trợ lý vẫn dùng được.
 

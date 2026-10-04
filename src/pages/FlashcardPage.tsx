@@ -1,9 +1,13 @@
 // src/pages/FlashcardPage.tsx
 import React, { useState, useEffect, useCallback } from 'react';
+import { notify } from '../components/Feedback/ToastHost';
 import { db, calculateNextReview } from '../services/database';
 import { speechService } from '../services/speech';
 import { Word, WordGroup } from '../types';
 import { lstmService } from '../services/lstmScheduler';
+import { Layers, Clock3, Volume2, ArrowRight, CheckCircle2, RotateCcw } from 'lucide-react';
+import './FlashcardPage.css';
+import './FlashcardApproved.css';
 
 type StudyMode = 'select' | 'studying' | 'result';
 type CardSide = 'front' | 'back';
@@ -12,21 +16,50 @@ export default function FlashcardPage() {
   const [mode, setMode] = useState<StudyMode>('select');
   const [groups, setGroups] = useState<WordGroup[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
-  const [studyMode, setStudyMode] = useState<'all' | 'due'>('all');
+  const [studyMode, setStudyMode] = useState<'all' | 'due'>(() => {
+    const intent = sessionStorage.getItem('lexforge-flashcard-intent');
+    sessionStorage.removeItem('lexforge-flashcard-intent');
+    return intent === 'due' ? 'due' : 'all';
+  });
   const [words, setWords] = useState<Word[]>([]);
   const [current, setCurrent] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [results, setResults] = useState<{ word: Word; correct: boolean }[]>([]);
   const [startTime, setStartTime] = useState(0);
   const [autoSpeak, setAutoSpeak] = useState(true);
+  const [dueCount, setDueCount] = useState(0);
+  const [allWordCount, setAllWordCount] = useState(0);
+  const [focusedWordId] = useState<number | null>(() => {
+    const raw = sessionStorage.getItem('lexforge-flashcard-word-id');
+    sessionStorage.removeItem('lexforge-flashcard-word-id');
+    const id = Number(raw);
+    return raw && Number.isFinite(id) ? id : null;
+  });
 
   useEffect(() => {
     db.getGroups().then(res => { if (res.success) setGroups(res.data || []); });
+    db.getDueWords(50).then(res => { if (res.success) setDueCount(res.data?.length || 0); });
+    db.getWords().then(res => { if (res.success) setAllWordCount(res.data?.length || 0); });
   }, []);
+
+  useEffect(() => {
+    if (mode !== 'studying') return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (['INPUT', 'TEXTAREA', 'BUTTON'].includes((event.target as HTMLElement).tagName)) return;
+      if (event.code === 'Space') { event.preventDefault(); setFlipped(value => !value); }
+      if (flipped && event.key === 'ArrowLeft') { event.preventDefault(); handleAnswer(false); }
+      if (flipped && event.key === 'ArrowRight') { event.preventDefault(); handleAnswer(true); }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [mode, flipped, words, current, results]);
 
   const startStudy = async () => {
     let res;
-    if (studyMode === 'due') {
+    if (focusedWordId !== null) {
+      res = await db.getWords();
+      if (res.success) res = { ...res, data: (res.data || []).filter(word => word.Id === focusedWordId) };
+    } else if (studyMode === 'due') {
       res = await db.getDueWords(50);
     } else {
       res = selectedGroups.length > 0
@@ -44,9 +77,11 @@ export default function FlashcardPage() {
       setMode('studying');
       if (autoSpeak) setTimeout(() => speechService.speak(shuffled[0].English), 300);
     } else {
-      alert('Không có từ nào để ôn luyện!');
+      notify('Chưa có từ nào để ôn. Hãy thêm từ vào thư viện trước nhé.', 'info');
     }
   };
+
+  useEffect(() => { if (focusedWordId !== null) startStudy(); }, [focusedWordId]);
 
   const handleAnswer = async (correct: boolean) => {
     const word = words[current];
@@ -86,36 +121,32 @@ export default function FlashcardPage() {
 
   const word = words[current];
   const progress = words.length > 0 ? ((current) / words.length) * 100 : 0;
+  const readyCount = studyMode === 'due' ? dueCount : selectedGroups.length ? groups.filter(group => selectedGroups.includes(group.Id)).reduce((sum, group) => sum + group.WordCount, 0) : allWordCount;
 
   if (mode === 'select') {
     return (
-      <div className="fc-select">
-        <div className="page-header">
-          <div>
-            <h1 className="page-title">Flashcard 🃏</h1>
-            <p className="page-subtitle">Ôn luyện từ vựng bằng thẻ ghi nhớ</p>
-          </div>
-        </div>
+      <div className="fc-select lf-flashcard">
+        <header className="lf-fc-hero"><span>LUYỆN TẬP THEO NHỊP CỦA BẠN</span><h1>Nhìn một lần. <em>Nhớ lâu hơn.</em></h1><p>Lật thẻ, tự đánh giá và để <strong>Lexforge nhắc bạn ôn đúng lúc.</strong></p><div><b>1 · Chọn từ</b><b>2 · Lật thẻ</b><b>3 · Xem kết quả</b></div></header>
 
         <div className="fc-select-content">
           <div className="fc-config-card">
-            <h3>⚙️ Cấu Hình Học</h3>
+            <h3>Chuẩn bị buổi học</h3>
 
             <div className="config-section">
-              <label className="form-label">Chế độ học</label>
+              <label className="form-label"><span className="lf-fc-step-number">1</span> Chọn cách học</label>
               <div className="mode-btns">
                 <button className={`mode-btn ${studyMode === 'all' ? 'active' : ''}`} onClick={() => setStudyMode('all')}>
-                  📚 Tất cả từ
+                  <Layers size={23}/><strong>Học theo nhóm</strong><small>Tự chọn chủ đề bạn muốn học</small>
                 </button>
                 <button className={`mode-btn ${studyMode === 'due' ? 'active' : ''}`} onClick={() => setStudyMode('due')}>
-                  ⏰ Từ cần ôn (SRS)
+                  <Clock3 size={23}/><strong>Ôn từ hôm nay</strong><small>{dueCount} từ đang đến lượt ôn</small>
                 </button>
               </div>
             </div>
 
             {studyMode === 'all' && (
               <div className="config-section">
-                <label className="form-label">Chọn nhóm từ <span style={{ color: 'var(--text-muted)' }}>(để trống = tất cả)</span></label>
+                <label className="form-label"><span className="lf-fc-step-number">2</span> Chọn nhóm từ</label>
                 <div className="group-select-grid">
                   {groups.map(g => (
                     <button
@@ -136,28 +167,14 @@ export default function FlashcardPage() {
 
             <div className="config-section">
               <div className="toggle-row">
-                <label className="form-label">🔊 Tự động đọc từ</label>
-                <div className={`toggle ${autoSpeak ? 'on' : ''}`} onClick={() => setAutoSpeak(!autoSpeak)} />
+                <label className="form-label"><span className="lf-fc-step-number">3</span> Sẵn sàng học</label>
               </div>
             </div>
 
-            <button className="btn btn-primary btn-lg w-full" onClick={startStudy}>
-              ▶ Bắt Đầu Học
-            </button>
+            <div className="lf-fc-ready"><div><strong>{readyCount} thẻ sẵn sàng</strong><span>Tự động đọc từ <button type="button" role="switch" aria-checked={autoSpeak} aria-label="Tự động đọc từ" className={`toggle ${autoSpeak ? 'on' : ''}`} onClick={() => setAutoSpeak(!autoSpeak)} /></span></div><button className="btn btn-primary btn-lg" onClick={startStudy}>Bắt đầu học <ArrowRight size={17}/></button></div>
           </div>
 
-          <div className="srs-info">
-            <h4>📊 Hệ thống SRS (Spaced Repetition)</h4>
-            <p>App sử dụng thuật toán Spaced Repetition để nhắc bạn ôn đúng lúc sắp quên:</p>
-            <div className="srs-levels">
-              {[['Mới', '1 ngày', '#475569'], ['Cơ bản', '3 ngày', '#f59e0b'], ['Đang học', '7 ngày', '#f97316'], ['Quen', '14 ngày', '#10b981'], ['Thuộc', '30 ngày', '#6366f1'], ['Thành thạo', '90 ngày', '#ec4899']].map(([label, day, color]) => (
-                <div key={label} className="srs-level">
-                  <div className="srs-dot" style={{ background: color as string }} />
-                  <span className="srs-label">{label}</span>
-                  <span className="srs-day">{day}</span>
-                </div>
-              ))}
-            </div>
+          <div className="srs-info"><h4>✧ Học thế nào?</h4><div className="lf-fc-flow"><div><small>MẶT TRƯỚC</small><strong>accomplish</strong><span>Bạn nhớ nghĩa là gì?</span></div><b>↓ LẬT THẺ</b><div><small>MẶT SAU</small><strong>hoàn thành</strong><span>Xem nghĩa và ví dụ</span></div><b>↓ TỰ ĐÁNH GIÁ</b><p><span>↺ Chưa thuộc</span><span>✓ Đã thuộc</span></p></div>
           </div>
         </div>
 
@@ -198,22 +215,21 @@ export default function FlashcardPage() {
     const correct = results.filter(r => r.correct).length;
     const accuracy = Math.round((correct / results.length) * 100);
     return (
-      <div className="fc-result">
+      <div className="fc-result lf-flashcard">
         <div className="result-card">
-          <div className="result-emoji">{accuracy >= 80 ? '🏆' : accuracy >= 60 ? '👍' : '💪'}</div>
-          <h2>Kết Quả Học</h2>
+          <div className="lf-fc-result-banner"><div className="result-emoji">✦</div><h2>Hoàn thành buổi học!</h2><p>Bạn vừa dành thời gian củng cố vốn từ của mình.</p></div>
           <div className="result-stats">
             <div className="result-stat">
               <div className="result-num green">{correct}</div>
-              <div>Đúng</div>
+              <div>Đã thuộc</div>
             </div>
             <div className="result-stat">
               <div className="result-num red">{results.length - correct}</div>
-              <div>Sai</div>
+              <div>Chưa thuộc</div>
             </div>
             <div className="result-stat">
               <div className="result-num accent">{accuracy}%</div>
-              <div>Chính xác</div>
+              <div>Tỷ lệ ghi nhớ</div>
             </div>
           </div>
           <div className="result-list">
@@ -226,7 +242,7 @@ export default function FlashcardPage() {
             ))}
           </div>
           <div className="result-actions">
-            <button className="btn btn-secondary" onClick={() => setMode('select')}>← Quay lại</button>
+            <button className="btn btn-secondary" onClick={() => setMode('select')}>← Chọn từ khác</button>
             <button className="btn btn-primary" onClick={() => { setResults([]); startStudy(); }}>🔄 Học lại</button>
           </div>
         </div>
@@ -255,16 +271,17 @@ export default function FlashcardPage() {
   }
 
   return (
-    <div className="fc-study">
+      <div className="fc-study lf-flashcard">
+      <header className="lf-fc-study-head"><h2>Đang học Flashcard</h2><button type="button" onClick={() => setMode('select')}>✕ Dừng học</button></header>
       {/* Progress */}
       <div className="fc-progress-bar">
         <div className="fc-progress-fill" style={{ width: `${progress}%` }} />
       </div>
-      <div className="fc-counter">{current + 1} / {words.length}</div>
+      <div className="fc-counter"><span>Thẻ {current + 1} / {words.length}</span><span>{Math.round(progress)}% hoàn thành</span></div>
 
       {/* Card */}
       <div className="fc-area">
-        <div className={`fc-card ${flipped ? 'flipped' : ''}`} onClick={() => { setFlipped(!flipped); if (!flipped && autoSpeak) speechService.speak(word.English); }}>
+        <div className={`fc-card ${flipped ? 'flipped' : ''}`} role="button" tabIndex={0} aria-label="Lật thẻ để xem nghĩa" onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); setFlipped(!flipped); } }} onClick={() => { setFlipped(!flipped); if (!flipped && autoSpeak) speechService.speak(word.English); }}>
           <div className="fc-face fc-front">
             <div className="fc-pos">{word?.PartOfSpeech}</div>
             <div className="fc-word">{word?.English}</div>
@@ -273,7 +290,7 @@ export default function FlashcardPage() {
             <div className="fc-group-tag" style={{ background: `${word?.GroupColor}22`, color: word?.GroupColor }}>
               {word?.GroupName}
             </div>
-            <button className="fc-speak" onClick={e => { e.stopPropagation(); speechService.speak(word?.English); }}>🔊</button>
+            <button className="fc-speak" onClick={e => { e.stopPropagation(); speechService.speak(word?.English); }} aria-label="Nghe phát âm"><Volume2 size={22}/></button>
           </div>
           <div className="fc-face fc-back">
             <div className="fc-word-small">{word?.English}</div>
@@ -290,16 +307,16 @@ export default function FlashcardPage() {
         {flipped && (
           <div className="fc-answer-btns">
             <button className="answer-btn wrong-btn" onClick={() => handleAnswer(false)}>
-              <span>😞</span><span>Chưa thuộc</span>
+              <RotateCcw size={24}/><span>Chưa thuộc</span>
             </button>
             <button className="answer-btn correct-btn" onClick={() => handleAnswer(true)}>
-              <span>😊</span><span>Đã thuộc</span>
+              <CheckCircle2 size={24}/><span>Đã thuộc</span>
             </button>
           </div>
         )}
       </div>
 
-      <button className="btn btn-secondary fc-quit" onClick={() => setMode('select')}>✕ Dừng học</button>
+      <p className="lf-fc-tip">Space để lật thẻ · Sau khi lật, dùng ← hoặc → để đánh giá</p>
 
       <style>{`
         .fc-study { display: flex; flex-direction: column; align-items: center; padding: 20px; min-height: 100vh; }

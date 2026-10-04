@@ -22,4 +22,6 @@ src.zip
 electron/selection-monitor/bin/
 electron/selection-monitor/obj/
 electron/selection-monitor/publish/
+electron/selection-monitor-tests/bin/
+electron/selection-monitor-tests/obj/
 .nuget-home/

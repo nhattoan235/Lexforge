@@ -1,5 +1,6 @@
 // src/pages/WordSniperPage.tsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { notify } from '../components/Feedback/ToastHost';
 import { db } from '../services/database';
 import { speechService } from '../services/speech';
 import { Word, WordGroup } from '../types';
@@ -173,7 +174,7 @@ export default function WordSniperPage() {
     const res = selectedGroups.length > 0
       ? await db.getWordsByGroups(selectedGroups)
       : await db.getWords();
-    if (!res.success || !res.data?.length) { alert('Không có từ!'); return; }
+    if (!res.success || !res.data?.length) { notify('Chưa có từ để chơi. Hãy thêm từ vào thư viện trước nhé.', 'info'); return; }
 
     wordsPool.current = res.data;
     setGameState('countdown');
@@ -310,7 +311,7 @@ export default function WordSniperPage() {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Nhóm từ (để trống = tất cả)</label>
+            <label className="form-label">Nhóm từ</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 160, overflowY: 'auto' }}>
               {groups.map(g => (
                 <button key={g.Id} className={`group-select-btn ${selectedGroups.includes(g.Id) ? 'active' : ''}`}

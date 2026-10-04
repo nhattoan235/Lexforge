@@ -5,30 +5,111 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Đang mở Lexforge</title>
     <style>
-      :root { font-family: "Segoe UI", system-ui, sans-serif; color: #f5f7fc; }
+      :root { font-family: "Segoe UI", system-ui, sans-serif; color: #f5fcfd; }
       * { box-sizing: border-box; }
       html, body { width: 100%; height: 100%; margin: 0; }
-      body { display: grid; place-items: center; background: #171b29; }
-      main { width: 100%; height: 100%; padding: 35px 37px; border: 1px solid #354057; }
-      .brand { display: flex; align-items: center; gap: 14px; }
-      .brand img { width: 52px; height: 52px; }
-      h1 { margin: 0; font-size: 23px; font-weight: 750; letter-spacing: -0.4px; }
-      .subtitle { margin-top: 3px; color: #aebcd1; font-size: 13px; }
-      .message { margin: 38px 0 14px; color: #e7ecf7; font-size: 14px; }
-      .track { width: 100%; height: 5px; overflow: hidden; border-radius: 10px; background: #30394e; }
-      .progress { width: 36%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #60d9bb, #fc7086); animation: loading 1.6s ease-in-out infinite alternate; }
-      @keyframes loading { from { transform: translateX(-100%); } to { transform: translateX(280%); } }
-      @media (prefers-reduced-motion: reduce) { .progress { animation: none; width: 65%; } }
+      body { overflow: hidden; background: #0b3045; }
+      main { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; overflow: hidden; border: 1px solid #408b9c; border-radius: 16px; background: radial-gradient(circle at 50% 33%, #1b7582, #10485f 48%, #0a2d43 100%); text-align: center; }
+      main::before, main::after { content: ""; position: absolute; width: 390px; height: 390px; border: 1px solid #a7e8e522; border-radius: 50%; pointer-events: none; animation: breathe 12s ease-in-out infinite alternate; }
+      main::before { right: -180px; top: -270px; box-shadow: 0 0 0 28px #ffffff05, 0 0 0 61px #ffffff04; }
+      main::after { left: -245px; bottom: -305px; animation-delay: -5s; box-shadow: 0 0 0 31px #ffffff05, 0 0 0 64px #ffffff04; }
+      .ambient { position: absolute; z-index: 1; display: flex; flex-direction: column; justify-content: space-between; width: 87px; height: 71px; padding: 10px; border: 1px solid #bcece650; border-radius: 11px; background: linear-gradient(145deg,#ecfffd1c,#ecfffd08); box-shadow: 0 12px 24px #082b3c28; animation: float 7s ease-in-out infinite; }
+      .ambient.left { left: 23px; top: 72px; transform: rotate(-9deg); }
+      .ambient.right { right: 23px; top: 111px; transform: rotate(8deg); animation-duration: 8.5s; animation-delay: -2.5s; }
+      .ambient-head { display: flex; justify-content: space-between; align-items: center; color: #c5eee9; font-size: 8px; font-weight: 800; letter-spacing: .12em; }
+      .ambient-head b { color: #ffd579; font-size: 15px; line-height: 1; }
+      .ambient-lines { display: grid; gap: 5px; }
+      .ambient-lines i { display: block; width: 72%; height: 3px; border-radius: 4px; background: #b5e9e76e; }
+      .ambient-lines i:last-child { width: 47%; background: #ffd071ad; }
+      .ambient.right .ambient-lines i:first-child { width: 57%; }
+      .ambient.right .ambient-lines i:last-child { width: 80%; }
+      .dust { position: absolute; z-index: 1; width: 4px; height: 4px; border-radius: 50%; background: #b1e9dd; box-shadow: 0 0 9px #97e8d6; animation: shimmer 5s ease-in-out infinite; }
+      .dust.d1 { left: 69px; bottom: 79px; }
+      .dust.d2 { right: 79px; top: 59px; width: 3px; height: 3px; animation-delay: -1.7s; }
+      .dust.d3 { right: 43px; bottom: 76px; width: 3px; height: 3px; animation-delay: -3.1s; }
+      .cosmos { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+      .sky-star { position: absolute; width: var(--size, 3px); height: var(--size, 3px); border-radius: 50%; background: var(--tone, #c3f3e9); box-shadow: 0 0 9px currentColor; color: var(--tone, #c3f3e9); opacity: .7; animation: shimmer var(--speed, 5s) ease-in-out infinite var(--delay, 0s); }
+      .sky-star.four-point { width: 7px; height: 7px; border-radius: 0; background: transparent; box-shadow: none; }
+      .sky-star.four-point::before { content: '✦'; position: absolute; left: 0; top: -4px; color: var(--tone, #ffe0a0); font-size: 10px; text-shadow: 0 0 9px currentColor; }
+      .planet { position: absolute; display: grid; place-items: center; width: var(--diameter); height: var(--diameter); animation: planet-float var(--float-speed) ease-in-out infinite var(--float-delay); }
+      .planet-core { position: absolute; inset: 24%; border: 1px solid #ffffff70; border-radius: 50%; background: radial-gradient(circle at 32% 27%, var(--highlight), var(--planet-color) 58%, var(--shadow)); box-shadow: inset -7px -8px 13px #03273b4d, 0 0 20px var(--glow); }
+      .planet-core::after { content: ''; position: absolute; left: 24%; top: 20%; width: 20%; height: 9%; border-radius: 50%; background: #ffffffa1; filter: blur(2px); transform: rotate(-35deg); }
+      .planet-belt { position: absolute; inset: 5%; border: 1px solid #c2f2e952; border-radius: 50%; transform: rotate(-20deg); animation: belt-spin var(--belt-speed) linear infinite; }
+      .planet-belt::before { content: ''; position: absolute; inset: 11%; border: 1px dashed #ddfff65c; border-radius: 50%; }
+      .planet-belt i { position: absolute; font-style: normal; color: var(--star-color); font-size: var(--star-size, 11px); line-height: 1; text-shadow: 0 0 11px currentColor; }
+      .planet-belt i:nth-child(1) { top: -5px; left: 47%; }
+      .planet-belt i:nth-child(2) { top: 48%; right: -5px; font-size: 8px; }
+      .planet-belt i:nth-child(3) { bottom: -5px; left: 42%; font-size: 7px; }
+      .planet-belt i:nth-child(4) { top: 43%; left: -5px; font-size: 9px; }
+      .planet-a { --diameter: 150px; --highlight: #b1f5e1; --planet-color: #40a99d; --shadow: #176977; --glow: #80e8d553; --star-color: #ffe6a4; --float-speed: 9s; --float-delay: -2s; --belt-speed: 27s; left: 13%; top: 16%; }
+      .planet-b { --diameter: 172px; --highlight: #ffe8ba; --planet-color: #d7a25d; --shadow: #956a50; --glow: #ffcf8b4d; --star-color: #fff2c4; --float-speed: 11s; --float-delay: -6s; --belt-speed: 34s; right: 11%; top: 18%; }
+      .planet-c { --diameter: 126px; --highlight: #cee9ff; --planet-color: #74a8c1; --shadow: #385f8c; --glow: #9bd8ef42; --star-color: #b9f6ee; --float-speed: 10s; --float-delay: -4s; --belt-speed: 31s; left: 19%; bottom: 10%; }
+      .planet-d { --diameter: 139px; --highlight: #e8d7ff; --planet-color: #9589bb; --shadow: #596696; --glow: #dbc9ff40; --star-color: #ffda97; --float-speed: 12s; --float-delay: -8s; --belt-speed: 38s; right: 17%; bottom: 8%; }
+      .planet-e { --diameter: 82px; --highlight: #d8fff0; --planet-color: #6fae92; --shadow: #467777; --glow: #bdf8cd3a; --star-color: #ffdfaa; --float-speed: 8s; --float-delay: -3s; --belt-speed: 24s; left: 38%; top: 13%; }
+      .planet-f { --diameter: 73px; --highlight: #ffe7c9; --planet-color: #c6918d; --shadow: #855e77; --glow: #ffd0bf38; --star-color: #c8f2ec; --float-speed: 13s; --float-delay: -7s; --belt-speed: 36s; right: 37%; bottom: 11%; }
+      .planet-b .planet-belt, .planet-d .planet-belt, .planet-f .planet-belt { animation-direction: reverse; }
+      .ambient { z-index: 2; }
+      .orbit, .eyebrow, h1, p, .track { z-index: 3; }
+      .orbit { position: relative; display: grid; place-items: center; width: 150px; height: 150px; margin-top: -8px; }
+      .orbit::before, .orbit::after { content: ""; position: absolute; border-radius: 50%; }
+      .orbit::before { inset: 2px; border: 1px solid #b5eeee3b; }
+      .orbit::after { inset: 17px; border: 1px dashed #a4e9df8c; animation: orbit 17s linear infinite; }
+      .ring { position: absolute; inset: 7px; border: 5px solid #bfe6e44d; border-top-color: #ffd070; border-left-color: #75d8c7; border-radius: 50%; animation: orbit 9s linear infinite; }
+      .center { display: grid; place-items: center; width: 88px; height: 88px; border: 1px solid #b6efea7d; border-radius: 50%; background: #0b354b; box-shadow: 0 0 30px #66ded13a; }
+      .center img { width: 58px; height: 58px; }
+      .star { position: absolute; color: #ffda7d; text-shadow: 0 0 12px #ffda7da6; }
+      .star.one { top: 8px; right: 10px; font-size: 20px; animation: twinkle 2.8s ease-in-out infinite; }
+      .star.two { bottom: 10px; left: 9px; font-size: 14px; animation: twinkle 3.7s ease-in-out infinite 1.2s; }
+      .eyebrow { margin-top: 3px; color: #a3e9dd; font-size: 10px; font-weight: 800; letter-spacing: .2em; }
+      h1 { margin: 3px 0 0; font-size: 29px; line-height: 1.1; letter-spacing: -.05em; }
+      p { margin: 8px 0 14px; color: #c4e3e9; font-size: 12px; }
+      .track { width: 190px; height: 4px; overflow: hidden; border-radius: 10px; background: #89bdc541; }
+      .progress { width: 38%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #73dcc7, #ffd070); animation: progress 1.8s ease-in-out infinite alternate; }
+      @keyframes orbit { to { transform: rotate(360deg); } }
+      @keyframes twinkle { 50% { opacity: .38; transform: scale(.78); } }
+      @keyframes progress { from { transform: translateX(-100%); } to { transform: translateX(270%); } }
+      @keyframes float { 50% { translate: 0 -7px; rotate: 2deg; } }
+      @keyframes shimmer { 50% { opacity: .24; transform: scale(.65); } }
+      @keyframes breathe { to { opacity: .45; transform: scale(1.035); } }
+      @keyframes planet-float { 50% { translate: 0 -10px; } }
+      @keyframes belt-spin { to { transform: rotate(340deg); } }
+      @media (max-width: 700px) {
+        .planet-a { --diameter: 85px; left: 1%; top: 13%; }.planet-b { --diameter: 94px; right: 0; top: 14%; }
+        .planet-c { --diameter: 72px; left: 5%; bottom: 6%; }.planet-d { --diameter: 78px; right: 5%; bottom: 6%; }
+        .planet-e, .planet-f { display: none; }
+        .ambient { display: none; }.sky-star { opacity: .55; }
+      }
+      @media (prefers-reduced-motion: reduce) { main::before, main::after, .ambient, .dust, .orbit::after, .ring, .star, .progress, .sky-star, .planet, .planet-belt { animation: none; } }
     </style>
   </head>
   <body>
     <main role="status" aria-live="polite">
-      <div class="brand">
-        <img src="../public/lexforge-mark.svg" alt="" />
-        <div><h1>Lexforge</h1><div class="subtitle">Trợ lý tiếng Anh của bạn</div></div>
+      <div class="cosmos" aria-hidden="true">
+        <div class="planet planet-a"><span class="planet-belt"><i>✦</i><i>✧</i><i>✦</i><i>✧</i></span><span class="planet-core"></span></div>
+        <div class="planet planet-b"><span class="planet-belt"><i>✦</i><i>✧</i><i>✦</i><i>✧</i></span><span class="planet-core"></span></div>
+        <div class="planet planet-c"><span class="planet-belt"><i>✦</i><i>✧</i><i>✦</i><i>✧</i></span><span class="planet-core"></span></div>
+        <div class="planet planet-d"><span class="planet-belt"><i>✦</i><i>✧</i><i>✦</i><i>✧</i></span><span class="planet-core"></span></div>
+        <div class="planet planet-e"><span class="planet-belt"><i>✦</i><i>✧</i><i>✦</i><i>✧</i></span><span class="planet-core"></span></div>
+        <div class="planet planet-f"><span class="planet-belt"><i>✦</i><i>✧</i><i>✦</i><i>✧</i></span><span class="planet-core"></span></div>
       </div>
-      <p class="message">Đang chuẩn bị không gian học tập…</p>
+      <div class="ambient left" aria-hidden="true"><span class="ambient-head">TỪ VỰNG <b>✧</b></span><span class="ambient-lines"><i></i><i></i></span></div>
+      <div class="ambient right" aria-hidden="true"><span class="ambient-head">GHI NHỚ <b>✦</b></span><span class="ambient-lines"><i></i><i></i></span></div>
+      <span class="dust d1" aria-hidden="true"></span><span class="dust d2" aria-hidden="true"></span><span class="dust d3" aria-hidden="true"></span>
+      <div class="orbit" aria-hidden="true"><span class="ring"></span><span class="star one">✦</span><span class="star two">✧</span><span class="center"><img src="../public/lexforge-mark.png" alt="" /></span></div>
+      <span class="eyebrow">HÀNH TRÌNH GHI NHỚ</span>
+      <h1>Lexforge</h1>
+      <p>Đang chuẩn bị không gian học của bạn...</p>
       <div class="track" aria-hidden="true"><div class="progress"></div></div>
     </main>
+    <script>
+      const stars = [[7,9,2],[12,38,3],[8,65,2],[16,87,4],[24,5,3],[27,42,2],[33,81,3],[39,16,2],[45,7,4],[52,22,2],[57,80,3],[63,6,2],[69,43,3],[74,87,4],[82,8,2],[89,42,3],[94,72,2],[96,18,3],[3,83,3],[36,56,2],[61,59,2],[85,63,3],[19,58,2],[76,24,2]];
+      const sky = document.querySelector('.cosmos');
+      stars.forEach(([x, y, size], index) => {
+        const star = document.createElement('span');
+        star.className = `sky-star${index % 5 === 0 ? ' four-point' : ''}`;
+        star.style.cssText = `left:${x}%;top:${y}%;--size:${size}px;--speed:${4 + index % 6}s;--delay:-${index * .47}s;--tone:${index % 4 === 0 ? '#ffe0a0' : '#c3f3e9'}`;
+        sky.appendChild(star);
+      });
+    </script>
   </body>
 </html>

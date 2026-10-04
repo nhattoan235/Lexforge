@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import multiplayerService from '../services/multiplayer';
 import { speechService } from '../services/speech';
+import './ZombieApproved.css';
 
 // ─── TYPES ───────────────────────────────────────────────────────────────────
 
@@ -333,6 +334,11 @@ const PlayerCharacter: React.FC<{ anim: PlayerAnim }> = ({ anim }) => (
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
 const ZombieGamePage: React.FC = () => {
+  const [view, setView] = useState<'setup' | 'demo' | 'result' | 'live'>('setup');
+  const [demoInput, setDemoInput] = useState('');
+  const [demoIndex, setDemoIndex] = useState(0);
+  const [demoHits, setDemoHits] = useState(0);
+  const [demoFeedback, setDemoFeedback] = useState('');
   const [enemies, setEnemies] = useState<Map<number, EnemyData>>(new Map());
   const [gameState, setGameState] = useState<GameState>({ wave: 0, lives: 20, gold: 150, score: 0, rage: 0 });
   const [answer, setAnswer] = useState('');
@@ -412,8 +418,23 @@ const ZombieGamePage: React.FC = () => {
     setAnswer('');
   };
 
+  const demoWords = [['deadline', 'hạn chót'], ['accomplish', 'hoàn thành, đạt được'], ['negotiate', 'đàm phán'], ['reliable', 'đáng tin cậy'], ['departure', 'sự khởi hành']];
+  const startDemo = () => { setDemoIndex(0); setDemoHits(0); setDemoInput(''); setDemoFeedback(''); setView('demo'); };
+  const fireDemo = () => {
+    if (!demoInput.trim()) return;
+    const correct = demoInput.trim().toLocaleLowerCase('en') === demoWords[demoIndex][0];
+    setDemoFeedback(correct ? 'Trúng đích! +10 điểm' : `Chưa đúng. Từ cần gõ: ${demoWords[demoIndex][0]}`);
+    if (correct) { setDemoHits(value => value + 1); setDemoIndex(index => (index + 1) % demoWords.length); }
+    setDemoInput('');
+  };
+
+  if (view === 'setup') return <div className="lf-zombie-approved"><div className="lf-zombie-topbar">Trò chơi <b>› Zombie Survival</b></div><div className="lf-zombie-content"><header className="lf-zombie-hero"><div><span>SINH TỒN BẰNG VỐN TỪ</span><h1>Gõ đúng. <em>Sống sót.</em></h1><p>Kẻ địch tiến đến từng đợt. <strong>Gõ từ tiếng Anh để bắn và giữ thành trì.</strong></p><div><b>Đợt tấn công</b><b>20 máu</b><b>Điểm · Vàng · Rage</b></div></div><div className="lf-zombie-hero-art" aria-hidden="true">🧟</div></header><div className="lf-zombie-setup"><section><h2>Trước khi vào trận</h2><p>Bạn sẽ thấy nghĩa tiếng Việt trên mỗi zombie. Gõ từ tiếng Anh tương ứng rồi nhấn Enter để bắn.</p><div className="lf-zombie-status"><i>◷</i><div><strong>Trận chơi thực cần kết nối</strong><span>Luồng game server hiện chưa đồng bộ; bạn có thể xem trận mẫu ngay bên dưới.</span></div></div><div className="lf-zombie-demo-card"><h3>Xem thử một trận Zombie Survival</h3><p>Khám phá bố cục chiến trường, thanh trạng thái và cách nhập từ mà không cần kết nối server.</p><div><button onClick={startDemo}>Xem trận mẫu →</button><button className="secondary" onClick={() => setView('live')}>Vào trận trực tuyến</button></div></div></section><aside><h2>Cách bảo vệ thành trì</h2><div className="lf-zombie-how">{['Đọc nghĩa trên đầu zombie', 'Gõ đúng từ tiếng Anh và bắn', 'Giữ máu qua các đợt tấn công'].map((step, index) => <div key={step}><i>{index + 1}</i><b>{step}</b></div>)}</div><div className="lf-zombie-enemies">{[['Thường','1 mục tiêu'],['Nhanh','Di chuyển nhanh'],['Trâu','Nhiều máu'],['Boss','Khó hơn']].map(([title,desc]) => <div key={title}><b>{title}</b><small>{desc}</small></div>)}</div></aside></div></div></div>;
+  if (view === 'demo') return <div className="lf-zombie-approved"><div className="lf-zombie-content"><div className="lf-zombie-demo-hud">{[['1','Đợt'],['20','Máu'],['150','Vàng'],[String(demoHits * 10),'Điểm'],[`${Math.min(demoHits * 20,100)}%`,'Rage']].map(([value,label]) => <div key={label}><b>{value}</b><span>{label}</span></div>)}</div><div className="lf-zombie-battle"><div className="lf-zombie-moon"/><div className="lf-zombie-building one"/><div className="lf-zombie-building two"/><div className="lf-zombie-building three"/><p>Gõ từ tiếng Anh của nghĩa hiện trên zombie</p><div className="lf-zombie-player" aria-hidden="true">◈</div><div className="lf-zombie-target"><span>{demoWords[demoIndex][1]}</span><b>🧟</b></div></div><div className="lf-zombie-controls"><input value={demoInput} onChange={e => setDemoInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && fireDemo()} placeholder="Gõ từ tiếng Anh rồi nhấn Enter..." autoFocus/><button onClick={fireDemo}>Bắn ↵</button></div><div className="lf-zombie-demo-foot"><span>{demoFeedback || 'Bản mẫu tương tác, không kết nối phòng chơi'}</span><button onClick={() => setView('result')}>Xem kết quả mẫu</button></div></div></div>;
+  if (view === 'result') return <div className="lf-zombie-approved"><div className="lf-zombie-content lf-zombie-result"><div className="lf-zombie-result-banner"><span>✦</span><h2>Kết thúc đợt sinh tồn</h2><p>Kết quả minh họa từ lượt chơi mẫu của bạn.</p></div><div className="lf-zombie-result-stats">{[['1','Đợt đạt được'],['20','Máu còn lại'],[String(demoHits * 10),'Điểm'],[String(demoHits),'Zombie đã hạ']].map(([value,label]) => <div key={label}><b>{value}</b><small>{label}</small></div>)}</div><div className="lf-zombie-result-actions"><button onClick={() => setView('setup')}>← Về đầu trang</button><button onClick={startDemo}>Xem trận khác →</button></div></div></div>;
+
   return (
-    <div className={`zombie-game-page ${screenShake ? 'screen-shake' : ''}`}>
+    <div className={`zombie-game-page lf-zombie-game ${screenShake ? 'screen-shake' : ''}`}>
+      <div className="lf-zombie-title"><span>LEXFORGE / TRÒ CHƠI</span><strong>Zombie Survival</strong><small>Gõ từ đúng để bảo vệ thành phố</small></div>
       <GameHUD {...gameState} />
 
       <div ref={battlefieldRef} className="game-battlefield">

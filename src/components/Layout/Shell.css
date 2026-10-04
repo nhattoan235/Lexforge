@@ -1,0 +1,28 @@
+.lf-sidebar { width: 240px; height: 100vh; flex: none; display: flex; flex-direction: column; padding: 18px 10px; overflow: hidden; background: linear-gradient(165deg,#102e42,#092232); border-right: 1px solid #33566a; color: #e8f5fa; font-family: "Segoe UI",Arial,sans-serif; }
+.lf-brand { padding: 3px 4px 15px; border-bottom: 1px solid #35556a; }
+.lf-brand-row { display: flex; align-items: center; gap: 11px; padding: 0 2px; }
+.lf-brand-row strong { color: #f4fcfd; font-size: 23px; letter-spacing: -.06em; }
+.lf-brand-mark { display: grid; place-items: center; width: 48px; height: 48px; flex: 0 0 48px; }
+.lf-brand-mark img { display: block; width: 48px; height: 48px; object-fit: contain; }
+.lf-brand-tagline { margin-top: 10px; padding: 8px; text-align: center; background: #294e60; border: 1px solid #917b4d; border-radius: 9px; color: #ffe1a0; font-size: 12px; font-weight: 800; }
+.lf-sidebar-nav { flex: 1; overflow-y: auto; overflow-x: hidden; margin: 10px 0; scrollbar-width: thin; scrollbar-color: #587e8d transparent; }
+.lf-sidebar-nav::-webkit-scrollbar { width: 6px; }.lf-sidebar-nav::-webkit-scrollbar-thumb { background: #587e8d; border-radius: 6px; }
+.lf-nav-group { margin-bottom: 8px; }.lf-nav-title { padding: 11px 10px 5px; color: #ffdb94; font-size: 11px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+.lf-nav-item { display: flex; align-items: center; gap: 11px; width: 100%; min-height: 37px; padding: 7px 11px; border: 0; border-left: 3px solid transparent; border-radius: 9px; background: transparent; color: #d9e9f0; text-align: left; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; transition: background .18s,color .18s; }
+.lf-nav-item svg { flex: none; color: #91c8d4; }.lf-nav-item:hover { background: #254b61; color: white; }.lf-nav-item.active { background: #17627e; border-left-color: #96e1ef; color: #fff; }.lf-nav-item.active svg { color: #ffdc8d; }
+.lf-nav-item:focus-visible { outline: 2px solid #ffd36e; outline-offset: -2px; }
+.lf-side-status { display: flex; align-items: center; gap: 10px; margin-top: auto; padding: 10px 11px; border: 1px solid #ffffff20; border-radius: 10px; background: #ffffff0b; }
+.lf-side-status b { display: block; color: #e7f5f7; font-size: 12px; }.lf-side-status small { display: block; margin-top: 3px; color: #9cbfce; font-size: 10px; }.lf-status-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #91e4c5; box-shadow: 0 0 0 4px #91e4c522,0 0 9px #91e4c5; }.lf-status-dot.offline { background: #ffd16b; box-shadow: 0 0 0 4px #ffd16b22; }
+.lf-dashboard-main { background: #edf5f8; }
+.lf-assistant-open { display:flex;align-items:center;gap:10px;width:100%;min-height:58px;margin:0 0 9px;padding:9px 10px;border:1px solid #73c9c2;border-radius:12px;background:linear-gradient(115deg,#17637a,#147a72);color:#fff;text-align:left;font:inherit;font-size:13px;font-weight:850;cursor:pointer;box-shadow:0 8px 18px #041f2d35; }
+.lf-assistant-open:hover { background:linear-gradient(115deg,#1b7890,#198c7d);border-color:#a4e9da; }
+.lf-assistant-open:focus-visible { outline:2px solid #ffd36e;outline-offset:2px; }
+.lf-assistant-open-icon { position:relative;display:grid;place-items:center;flex:none;width:35px;height:35px;border-radius:9px;background:#ffffff22;color:#e7fffb; }
+.lf-assistant-open-icon svg:last-child { position:absolute;right:2px;top:2px;color:#ffdb83; }
+.lf-assistant-open>span:nth-child(2) { flex:1; }
+.lf-assistant-open small { display:block;margin-top:3px;color:#bff0e8;font-size:10px;font-weight:650; }
+.lf-assistant-open-arrow { flex:none;color:#ffdb83;font-size:19px; }
+@media(max-width:1100px) { .lf-sidebar { width: 210px; } }
+@media(max-width:760px) { .lf-sidebar { width: 66px; padding: 10px 5px; } .lf-brand-row { justify-content: center; padding: 0; }.lf-brand-row strong,.lf-brand-tagline,.lf-nav-title,.lf-nav-item span,.lf-side-status div { display: none; }.lf-brand { padding: 0 0 12px; }.lf-brand-mark { width: 44px; height: 44px; }.lf-nav-item { justify-content: center; padding: 9px; }.lf-side-status { justify-content: center; padding: 11px; } }
+@media(max-width:760px) { .lf-assistant-open { justify-content:center;min-height:48px;padding:6px; }.lf-assistant-open>span:nth-child(2),.lf-assistant-open-arrow { display:none; } }
+@media(prefers-reduced-motion:reduce) { .lf-nav-item { transition: none; } }

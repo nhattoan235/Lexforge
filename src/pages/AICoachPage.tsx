@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { notify } from '../components/Feedback/ToastHost';
 import { db } from '../services/database';
 import { speechService } from '../services/speech';
 import { Word, WordGroup } from '../types';
+import './AICoachApproved.css';
 
 interface SentenceTranslation {
   text: string;
@@ -607,11 +609,11 @@ export default function AICoachPage() {
               : result.errorCode === 'service-error'
               ? '🌐 Lỗi kết nối server. Kiểm tra Python backend có chạy không.'
               : result.error || 'Lỗi không xác định';
-            alert(errorMsg);
+            notify(errorMsg, 'error', 8000);
           }
         } catch (err) {
           console.error('Lỗi gửi audio:', err);
-          alert('❌ Không thể kết nối tới speech server. Kiểm tra:\n1. Python backend đang chạy (python speech_server.py)\n2. Port 5000 mở được');
+          notify('Không thể kết nối dịch vụ giọng nói. Hãy kiểm tra server và cổng 5000.', 'error', 8000);
         } finally {
           setIsListening(false);
         }
@@ -640,11 +642,11 @@ export default function AICoachPage() {
       setIsListening(false);
       
       if (err.name === 'NotAllowedError') {
-        alert('🔒 Quyền micro bị từ chối. Cho phép micro trong cài đặt.');
+        notify('Quyền micro bị từ chối. Hãy cho phép micro trong cài đặt.', 'error', 8000);
       } else if (err.name === 'NotFoundError') {
-        alert('❌ Không tìm thấy micro. Kiểm tra thiết bị âm thanh.');
+        notify('Không tìm thấy micro. Hãy kiểm tra thiết bị âm thanh.', 'error', 8000);
       } else {
-        alert('❌ Lỗi micro: ' + err.message);
+        notify('Lỗi micro: ' + err.message, 'error', 8000);
       }
     }
   };
@@ -658,103 +660,17 @@ export default function AICoachPage() {
 
   // ─── Setup screen ─────────────────────────────────────────────────────────────
   if (!sessionStarted) return (
-    <div style={{ paddingBottom: 32 }}>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">AI Coach 🤖</h1>
-          <p className="page-subtitle">Luyện kỹ năng viết & giao tiếp với AI — học từ vựng qua hội thoại thực tế</p>
-        </div>
-      </div>
-      <div style={{ padding: '24px 32px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, maxWidth: 820 }}>
-          {/* Left: Config */}
-          <div>
-            <div className="card" style={{ marginBottom: 16 }}>
-              <h3 style={{ marginBottom: 16, fontSize: 15 }}>🎯 Chọn Chế Độ</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {MODES.map(m => (
-                  <button key={m.id} onClick={() => setMode(m.id)} style={{
-                    display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
-                    borderRadius: 10, border: `1.5px solid ${mode === m.id ? 'var(--accent)' : 'var(--border)'}`,
-                    background: mode === m.id ? 'rgba(99,102,241,0.1)' : 'var(--bg-secondary)',
-                    color: 'var(--text-primary)', fontFamily: 'inherit', cursor: 'pointer', textAlign: 'left',
-                  }}>
-                    <span style={{ fontSize: 22 }}>{m.icon}</span>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: mode === m.id ? 'var(--accent-bright)' : 'var(--text-primary)' }}>{m.label}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{m.desc}</div>
-                    </div>
-                    {mode === m.id && <span style={{ marginLeft: 'auto', color: 'var(--accent-bright)' }}>✓</span>}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="card">
-              <h3 style={{ marginBottom: 14, fontSize: 15 }}>⚙️ Tùy Chọn</h3>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13 }}>
-                <input type="checkbox" checked={autoSpeak} onChange={e => setAutoSpeak(e.target.checked)}
-                  style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
-                <span>🔊 Tự động đọc phản hồi của AI</span>
-              </label>
-            </div>
-          </div>
-          {/* Right: Word groups */}
-          <div>
-            <div className="card">
-              <h3 style={{ marginBottom: 14, fontSize: 15 }}>📚 Bộ Từ Vựng</h3>
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-                AI sẽ học và sử dụng những từ này trong hội thoại. Bỏ trống = dùng tất cả.
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 280, overflowY: 'auto' }}>
-                <button onClick={() => setSelectedGroups([])} style={{
-                  display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8,
-                  border: `1px solid ${selectedGroups.length === 0 ? 'var(--accent)' : 'var(--border)'}`,
-                  background: selectedGroups.length === 0 ? 'rgba(99,102,241,0.1)' : 'var(--bg-secondary)',
-                  color: 'var(--text-primary)', fontFamily: 'inherit', cursor: 'pointer', fontSize: 13,
-                }}>
-                  <span>🌐</span><span>Tất cả từ vựng</span>
-                  {selectedGroups.length === 0 && <span style={{ marginLeft: 'auto', color: 'var(--accent-bright)' }}>✓</span>}
-                </button>
-                {groups.map(g => (
-                  <button key={g.Id} onClick={() => toggleGroup(g.Id)} style={{
-                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8,
-                    border: `1px solid ${selectedGroups.includes(g.Id) ? g.Color : 'var(--border)'}`,
-                    background: selectedGroups.includes(g.Id) ? `${g.Color}18` : 'var(--bg-secondary)',
-                    color: 'var(--text-primary)', fontFamily: 'inherit', cursor: 'pointer', fontSize: 13, textAlign: 'left',
-                  }}>
-                    <span>{g.Icon}</span><span>{g.Name}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>{g.WordCount} từ</span>
-                    {selectedGroups.includes(g.Id) && <span style={{ color: g.Color }}>✓</span>}
-                  </button>
-                ))}
-              </div>
-              {!apiKey && (
-                <div style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', fontSize: 12, color: '#fca5a5', marginBottom: 12 }}>
-                  ⚠️ Chưa có Groq API key — vào <strong>Cài Đặt</strong> để nhập Groq Cloud API Key
-                </div>
-              )}
-              <div style={{ marginTop: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <button className="btn btn-primary w-full btn-lg" onClick={() => startSession(false)}
-                  style={{ fontSize: 15, padding: '14px' }}>
-                  {MODES.find(m => m.id === mode)?.icon} Bắt Đầu {MODES.find(m => m.id === mode)?.label}
-                </button>
-                {localStorage.getItem(`ai_coach_chat_history_${mode}`) && (
-                  <button className="btn btn-secondary w-full" onClick={() => startSession(true)}
-                    style={{ fontSize: 13, padding: '10px' }}>
-                    📜 Tiếp Tục Lịch Sử Hội Thoại Cũ
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div className="lf-ai-approved">
+      <div className="lf-ai-topbar">Luyện tập <span>› AI Coach</span></div>
+      <header className="lf-ai-hero"><span>LUYỆN TIẾNG ANH CÙNG AI</span><h1>Nói có ý. <em>Viết có chất.</em></h1><p>Chọn cách luyện. AI Coach giúp bạn <strong>phản xạ và dùng từ đúng ngữ cảnh.</strong></p><div><b>Hội thoại</b><b>Luyện viết</b><b>Luyện nói</b></div></header>
+      <div className="lf-ai-setup-grid"><section className="lf-ai-panel"><h2>Chọn cách luyện</h2><p>Bắt đầu từ kỹ năng bạn muốn cải thiện hôm nay.</p><div className="lf-ai-modes">{MODES.map(m => <button key={m.id} className={mode === m.id ? 'active' : ''} onClick={() => setMode(m.id)}><i>{m.id === 'chat' ? '◌' : m.id === 'writing' ? '✎' : '♫'}</i><span><strong>{m.label}</strong><small>{m.id === 'chat' ? 'Trò chuyện và tập phản xạ bằng tiếng Anh' : m.id === 'writing' ? 'Viết câu, nhận góp ý cách diễn đạt' : 'Nói thành tiếng, nghe AI phản hồi'}</small></span><em>{mode === m.id ? '✓' : ''}</em></button>)}</div><div className="lf-ai-switch-row"><strong>Tự động đọc phản hồi của AI</strong><button role="switch" aria-checked={autoSpeak} className={autoSpeak ? 'on' : ''} onClick={() => setAutoSpeak(!autoSpeak)} aria-label="Tự động đọc phản hồi của AI"><span /></button></div></section>
+      <section className="lf-ai-panel"><h2>Chọn từ vựng cho buổi luyện</h2><p>AI sẽ đưa từ trong nhóm bạn chọn vào câu trả lời.</p><div className="lf-ai-groups"><button className={selectedGroups.length === 0 ? 'active' : ''} onClick={() => setSelectedGroups([])}><i>◎</i><strong>Tất cả từ vựng</strong><small>{words.length} từ</small><em>{selectedGroups.length === 0 ? '✓' : ''}</em></button>{groups.map(g => <button key={g.Id} className={selectedGroups.includes(g.Id) ? 'active' : ''} onClick={() => toggleGroup(g.Id)}><i>{g.Icon || '▤'}</i><strong>{g.Name}</strong><small>{g.WordCount} từ</small><em>{selectedGroups.includes(g.Id) ? '✓' : ''}</em></button>)}</div>{!apiKey && <div className="lf-ai-key-warning">Chưa có Groq API key. Hãy nhập key trong Cài đặt để dùng AI Coach.</div>}<div className="lf-ai-ready"><strong>{mode === 'chat' ? 'Sẵn sàng hội thoại' : mode === 'writing' ? 'Sẵn sàng luyện viết' : 'Sẵn sàng luyện nói'}</strong><p>{mode === 'chat' ? 'Tập dùng từ vựng qua tình huống thực tế.' : mode === 'writing' ? 'Viết một câu hoặc đoạn ngắn để nhận góp ý.' : 'Nói thành tiếng hoặc nhập câu để luyện phản xạ.'}</p><div><button className="primary" onClick={() => startSession(false)}>Bắt đầu →</button>{localStorage.getItem(`ai_coach_chat_history_${mode}`) && <button onClick={() => startSession(true)}>Tiếp tục cuộc trò chuyện</button>}</div></div></section></div>
     </div>
   );
 
   // ─── Chat screen ──────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+    <div className="lf-ai-chat" style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
       {/* Warning banner */}
       {showWarningBanner && (
         <div style={{
@@ -774,7 +690,7 @@ export default function AICoachPage() {
         </div>
       )}
       {/* Header */}
-      <div style={{
+      <div className="lf-ai-chat-head" style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '10px 20px', background: 'var(--bg-secondary)',
           borderBottom: '1px solid var(--border)', zIndex: 10, gap: 12,
@@ -827,7 +743,7 @@ export default function AICoachPage() {
       </div>
 
       {/* Messages */}
-      <div onMouseUp={handleMouseUp} style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div className="lf-ai-chat-messages" onMouseUp={handleMouseUp} style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
         {messages.map(msg => (
           <div key={msg.id} style={{
             display: 'flex', gap: 12, flexDirection: msg.role === 'user' ? 'row-reverse' : 'row',
@@ -844,7 +760,7 @@ export default function AICoachPage() {
             </div>
             {/* Bubble */}
             <div style={{ maxWidth: '72%' }}>
-              <div 
+              <div className="lf-ai-bubble"
                 data-role={msg.role}
                 style={{
                   padding: '12px 16px', borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
@@ -959,7 +875,7 @@ export default function AICoachPage() {
               </div>
               {/* Speak & Translate buttons per message */}
               {!msg.isLoading && msg.role === 'assistant' && (
-                <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                <div className="lf-ai-bubble-actions" style={{ display: 'flex', gap: 6, marginTop: 4 }}>
                   <button onClick={() => speakText(msg.content)} style={{
                     padding: '3px 8px', fontSize: 10, borderRadius: 10,
                     border: '1px solid var(--border)', background: 'transparent',
@@ -982,7 +898,7 @@ export default function AICoachPage() {
 
       {/* Suggested prompts */}
       {messages.length <= 2 && (
-        <div style={{ padding: '0 24px 10px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="lf-ai-suggestions" style={{ padding: '0 24px 10px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {(mode === 'chat'
             ? ["Tell me about your day", "Let's talk about business", "What's your opinion on technology?", "Can we practice job interviews?"]
             : mode === 'writing'
@@ -1002,7 +918,7 @@ export default function AICoachPage() {
       )}
 
       {/* Translator helper panel */}
-      <div style={{ padding: '0 20px 8px', display: 'flex', justifyContent: 'flex-start' }}>
+      <div className="lf-ai-helper-toggle" style={{ padding: '0 20px 8px', display: 'flex', justifyContent: 'flex-start' }}>
         <button
           onClick={() => setShowTranslatorHelper(prev => !prev)}
           style={{
@@ -1031,7 +947,7 @@ export default function AICoachPage() {
       </div>
 
       {showTranslatorHelper && (
-        <div style={{
+        <div className="lf-ai-helper-panel" style={{
           margin: '0 20px 12px',
           padding: 14,
           background: 'rgba(26, 26, 53, 0.6)',
@@ -1159,16 +1075,16 @@ export default function AICoachPage() {
       )}
 
       {/* Input area */}
-      <div style={{ padding: '12px 20px', background: 'var(--bg-secondary)', borderTop: '1px solid var(--border)' }}>
+      <div className="lf-ai-composer" style={{ padding: '12px 20px', background: 'var(--bg-secondary)', borderTop: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
           <textarea
-            ref={inputRef} value={input}
+            className="lf-ai-message-input" ref={inputRef} value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={
-              mode === 'chat' ? "Type your message... (Enter to send, Shift+Enter for newline)"
-              : mode === 'writing' ? "Paste or type your English text for review..."
-              : "Type what you would say out loud..."
+              mode === 'chat' ? 'Viết câu tiếng Anh của bạn...'
+              : mode === 'writing' ? 'Viết câu hoặc đoạn tiếng Anh cần góp ý...'
+              : 'Nói hoặc nhập điều bạn muốn luyện...'
             }
             rows={2}
             style={{

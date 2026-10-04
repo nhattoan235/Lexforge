@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ListeningQuestion, mp4ListeningService } from '../services/mp4ListeningService';
+import './ListeningApproved.css';
 
 type LessonState = 'setup' | 'generating' | 'study' | 'result';
 type LessonPhase = 'english' | 'meaning';
@@ -67,8 +68,7 @@ export default function MP4ListeningPage() {
     return { total: records.length, correct: records.filter(a => a.correct).length };
   }, [answers]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const nextFile = e.target.files?.[0];
+  const selectFile = (nextFile?: File) => {
     if (!nextFile) return;
     if (objectUrl) URL.revokeObjectURL(objectUrl);
     setFile(nextFile);
@@ -81,6 +81,10 @@ export default function MP4ListeningPage() {
     setShowScript(false);
     setError('');
     setLessonState('setup');
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    selectFile(e.target.files?.[0]);
     e.target.value = '';
   };
 
@@ -188,15 +192,18 @@ export default function MP4ListeningPage() {
   const totalAccuracy = totalAnswers ? Math.round((totalCorrect / totalAnswers) * 100) : 0;
 
   return (
-    <div className="mp4-page">
-      <div className="page-header">
+    <div className={`mp4-page lf-training-page lf-listening-page lf-listening-${lessonState}`}>
+      <div className="page-header lf-training-hero">
         <div>
-          <h1 className="page-title">Học Nghe Bằng MP3</h1>
-          <p className="page-subtitle">Tạo bài nghe trắc nghiệm từ audio bằng Groq AI</p>
+          <span className="lf-training-eyebrow">NGHE · HIỂU · GHI NHỚ</span><h1 className="page-title">Học nghe <em>theo nhịp của bạn.</em></h1>
+          <p className="page-subtitle">Biến file MP3 thành bài luyện nghe và kiểm tra mức độ hiểu bằng AI.</p>
+          <div className="lf-training-tags"><span>Chọn file MP3</span><span>Nghe từng đoạn</span><span>Hiểu nghĩa</span></div>
         </div>
-        <button className="btn btn-secondary" onClick={() => fileRef.current?.click()}>
-          Chọn file MP3
-        </button>
+        <div className="lf-listening-hero-art">
+          <div className="lf-listening-disc"><span>♫</span></div>
+          <div className="lf-listening-wave" aria-hidden="true">{[16,30,45,24,53,35,18,41,28,48,22,34,17].map((height, index) => <i key={index} style={{ height }} />)}</div>
+          <div className="lf-listening-file-action"><small>PHÒNG NGHE CỦA BẠN</small><strong>Một file, nhiều điều để khám phá.</strong><button type="button" className="btn btn-secondary" onClick={() => fileRef.current?.click()}>Chọn file MP3 <span aria-hidden="true">↗</span></button></div>
+        </div>
       </div>
 
       <input ref={fileRef} type="file" accept="audio/mpeg,.mp3" style={{ display: 'none' }} onChange={handleFileChange} />
@@ -209,10 +216,11 @@ export default function MP4ListeningPage() {
               <audio ref={audioRef} src={objectUrl} onTimeUpdate={handleTimeUpdate} className="mp4-audio" controls />
             </div>
           ) : (
-            <div className="mp4-drop" onClick={() => fileRef.current?.click()}>
-              <div className="mp4-drop-icon">MP3</div>
-              <div className="mp4-drop-title">Chọn một file MP3 để bắt đầu</div>
-              <div className="mp4-drop-sub">AI sẽ chuyển lời thoại thành script và câu hỏi nghe hiểu</div>
+          <div className="mp4-drop" onClick={() => fileRef.current?.click()} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); e.stopPropagation(); const dropped = e.dataTransfer.files?.[0]; if (dropped?.type === 'audio/mpeg' || dropped?.name.toLowerCase().endsWith('.mp3')) selectFile(dropped); else setError('Hãy chọn file MP3 để tạo bài nghe.'); }}>
+              <div className="mp4-drop-icon">♫</div>
+              <div className="mp4-drop-title">Kéo thả file MP3 vào đây</div>
+              <div className="mp4-drop-sub">Hoặc chọn file từ máy tính</div>
+              <button type="button" className="btn btn-secondary" onClick={e => { e.stopPropagation(); fileRef.current?.click(); }}>Chọn file MP3</button>
             </div>
           )}
 
@@ -231,19 +239,15 @@ export default function MP4ListeningPage() {
 
         {lessonState === 'setup' && (
           <div className="mp4-card setup-card">
-            <div className="setup-icon">AI</div>
-            <h2>Tạo bài học từ MP3</h2>
-            <p>
-              App sẽ trích lời thoại tiếng Anh, chia thành từng đoạn ngắn, sau đó tạo 2 vòng câu hỏi:
-              chọn script tiếng Anh nghe được và chọn nghĩa tiếng Việt tương ứng.
-              Các phần directions, câu hỏi và đáp án có sẵn trong audio workbook sẽ được bỏ qua.
-            </p>
+            <h2>Tạo bài luyện nghe</h2>
+            <p>AI tách lời thoại, chia đoạn và tạo câu hỏi.</p>
             {error && <div className="mp4-error">{error}</div>}
             <button className="btn btn-primary btn-lg" onClick={handleCreateLesson} disabled={!file}>
-              Tạo bài học
+              Tạo bài học →
             </button>
           </div>
         )}
+        {lessonState === 'setup' && <aside className="lf-listening-guide"><h2>Bài học gồm 2 lượt</h2><p>Mỗi đoạn âm thanh được nghe lại ở cả hai lượt.</p><div className="lf-listening-step"><i>1</i><div><strong>Nghe và chọn câu tiếng Anh</strong><span>Nhận ra chính xác điều bạn vừa nghe.</span></div></div><b className="lf-listening-arrow">↓</b><div className="lf-listening-step"><i>2</i><div><strong>Nghe lại và chọn nghĩa</strong><span>Ghép lời thoại với ý nghĩa tiếng Việt.</span></div></div><div className="lf-listening-note">Bạn có thể nghe lại đoạn âm thanh và mở lời thoại khi cần.</div></aside>}
 
         {lessonState === 'generating' && (
           <div className="mp4-card generating-card">

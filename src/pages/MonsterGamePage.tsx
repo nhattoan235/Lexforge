@@ -1,8 +1,9 @@
 // src/pages/MonsterGamePage.tsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { notify } from '../components/Feedback/ToastHost';
 import { db } from '../services/database';
-import { speechService } from '../services/speech';
 import { Word, WordGroup } from '../types';
+import './MonsterApproved.css';
 
 type GameState = 'select' | 'playing' | 'result';
 type InputLang = 'en' | 'vi';
@@ -397,6 +398,7 @@ export default function MonsterGamePage(){
   const wordsRef=useRef<Word[]>([]);
   const idCounter=useRef(0);
   const spawnTimer=useRef<any>(null);
+  const levelTimer=useRef<ReturnType<typeof setInterval>|null>(null);
   const livesRef=useRef(3);
   const levelRef=useRef(1);
   const killedRef=useRef(0);
@@ -406,7 +408,7 @@ export default function MonsterGamePage(){
   const canvasSizeRef=useRef({w:800,h:500});
 
   useEffect(()=>{db.getGroups().then(res=>{if(res.success)setGroups(res.data||[]);});return()=>{cleanup();};},[]);
-  const cleanup=()=>{cancelAnimationFrame(frameRef.current);if(spawnTimer.current)clearInterval(spawnTimer.current);};
+  const cleanup=()=>{cancelAnimationFrame(frameRef.current);if(spawnTimer.current)clearInterval(spawnTimer.current);if(levelTimer.current)clearInterval(levelTimer.current);spawnTimer.current=null;levelTimer.current=null;};
 
   const spawnParticles=(x:number,y:number,pts:number,cmb:number,mIdx:number,tier:number)=>{
     const {w,h}=canvasSizeRef.current;
@@ -451,14 +453,14 @@ export default function MonsterGamePage(){
       const td=md.tiers[m.tier];
       // word bubble
       const wordText=inputLang==='en'?m.word.Vietnamese:m.word.English;
-      ctx.font='bold 13px "Space Grotesk",sans-serif';
+      ctx.font='bold 13px "Segoe UI",sans-serif';
       const tw=ctx.measureText(wordText).width;
       const bw=tw+20,bh=26,bx=px-bw/2,by=py+mSize*0.55+6;
       const bubbleBorder=m.tier===2?'rgba(245,158,11,0.8)':m.tier===1?'rgba(34,211,238,0.65)':'rgba(99,102,241,0.5)';
       ctx.fillStyle='rgba(6,6,20,0.88)';ctx.beginPath();ctx.roundRect(bx,by,bw,bh,6);ctx.fill();
       ctx.strokeStyle=bubbleBorder;ctx.lineWidth=1;ctx.stroke();
-      if(m.tier>0){const tLabel=m.tier===2?'BOSS':'ELITE';const tColor=m.tier===2?'#f59e0b':'#22d3ee';ctx.font='bold 9px "Space Grotesk",sans-serif';ctx.fillStyle=tColor;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(tLabel,px,by-8);}
-      ctx.font='bold 13px "Space Grotesk",sans-serif';
+      if(m.tier>0){const tLabel=m.tier===2?'BOSS':'ELITE';const tColor=m.tier===2?'#f59e0b':'#22d3ee';ctx.font='bold 9px "Segoe UI",sans-serif';ctx.fillStyle=tColor;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(tLabel,px,by-8);}
+      ctx.font='bold 13px "Segoe UI",sans-serif';
       ctx.fillStyle=td.accent;ctx.textAlign='center';ctx.textBaseline='middle';
       ctx.fillText(wordText,px,by+bh/2);
       if(m.maxHp>1){const bpx=px-24,bpy=by+bh+4;ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillRect(bpx,bpy,48,5);ctx.fillStyle=m.tier===2?'#f59e0b':'#22d3ee';ctx.fillRect(bpx,bpy,48*(m.hp/m.maxHp),5);}
@@ -468,7 +470,7 @@ export default function MonsterGamePage(){
     particlesRef.current=particlesRef.current.filter(p=>p.life>0);
     particlesRef.current.forEach(p=>{
       const alpha=p.life/p.maxLife;ctx.globalAlpha=alpha;
-      if(p.type==='text'&&p.text){ctx.font=`bold ${p.size}px "Space Grotesk",sans-serif`;ctx.fillStyle=p.color;ctx.textAlign='center';ctx.textBaseline='middle';ctx.shadowColor=p.color;ctx.shadowBlur=12;ctx.fillText(p.text,p.x,p.y);ctx.shadowBlur=0;}
+      if(p.type==='text'&&p.text){ctx.font=`bold ${p.size}px "Segoe UI",sans-serif`;ctx.fillStyle=p.color;ctx.textAlign='center';ctx.textBaseline='middle';ctx.shadowColor=p.color;ctx.shadowBlur=12;ctx.fillText(p.text,p.x,p.y);ctx.shadowBlur=0;}
       else if(p.type==='star'){ctx.fillStyle=p.color;const sz=p.size*(0.5+alpha*0.5);ctx.save();ctx.translate(p.x,p.y);ctx.rotate(Date.now()/200);ctx.beginPath();for(let i=0;i<5;i++){const a=(i/5)*Math.PI*2-Math.PI/2,ia=a+Math.PI/5;i===0?ctx.moveTo(Math.cos(a)*sz,Math.sin(a)*sz):ctx.lineTo(Math.cos(a)*sz,Math.sin(a)*sz);ctx.lineTo(Math.cos(ia)*sz*0.4,Math.sin(ia)*sz*0.4);}ctx.closePath();ctx.fill();ctx.restore();}
       else{ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.size*alpha,0,Math.PI*2);ctx.fill();}
       p.x+=p.vx;p.y+=p.vy;p.vy+=0.12;p.life--;
@@ -477,8 +479,9 @@ export default function MonsterGamePage(){
   },[inputLang]);
 
   const startGame=async()=>{
+    cleanup();
     const res=selectedGroups.length>0?await db.getWordsByGroups(selectedGroups):await db.getWords();
-    if(!res.success||!res.data?.length){alert('Không có từ nào!');return;}
+    if(!res.success||!res.data?.length){notify('Chưa có từ để vào trận. Hãy thêm từ vào thư viện trước nhé.', 'info');return;}
     const words=[...res.data].sort(()=>Math.random()-0.5);
     wordsRef.current=words;
     monstersRef.current=[];particlesRef.current=[];
@@ -506,12 +509,12 @@ export default function MonsterGamePage(){
       const tc=TIER_CONFIG[tier];
       const newM:Monster={id:++idCounter.current,word,x:Math.random()*74+8,y:-10,speed:(0.024+levelRef.current*0.007)*tc.speedMult,hp:tc.hpMult,maxHp:tc.hpMult,monsterIdx,tier,frame:0,frameTimer:0};
       monstersRef.current=[...monstersRef.current,newM];
-      speechService.speak(word.English);
+      // Avoid queuing speech for every spawn; it can overlap with typing and stall the renderer.
     };
 
     spawnTimer.current=setInterval(spawn,2800);spawn();
 
-    const levelCheck=setInterval(()=>{
+    levelTimer.current=setInterval(()=>{
       const newLv=Math.floor(killedRef.current/10)+1;
       if(newLv!==levelRef.current){levelRef.current=newLv;setLevel(newLv);setLevelUpFlash(true);setTimeout(()=>setLevelUpFlash(false),1200);clearInterval(spawnTimer.current);spawnTimer.current=setInterval(spawn,Math.max(900,2800-(newLv-1)*230));}
     },1000);
@@ -519,22 +522,25 @@ export default function MonsterGamePage(){
     let lastTime=performance.now();
     const gameLoop=(now:number)=>{
       if(livesRef.current<=0)return;
-      const delta=now-lastTime;lastTime=now;
+      const delta=Math.min(50,now-lastTime);
+      if(delta<30){frameRef.current=requestAnimationFrame(gameLoop);return;}
+      lastTime=now;
+      const frameScale=delta/(1000/60);
       monstersRef.current=monstersRef.current.map(m=>{
         const fps=MONSTERS_DATA[m.monsterIdx].fps*(m.tier===2?0.7:m.tier===1?0.85:1);
         let ft=m.frameTimer+delta,fr=m.frame;
         if(ft>=fps){fr=(fr+1)%8;ft=0;}
         return{...m,frame:fr,frameTimer:ft};
       });
-      monstersRef.current=monstersRef.current.map(m=>({...m,y:m.y+m.speed+levelRef.current*0.003}));
-      bgOffsetRef.current+=0.6+levelRef.current*0.1;
+      monstersRef.current=monstersRef.current.map(m=>({...m,y:m.y+(m.speed+levelRef.current*0.003)*frameScale}));
+      bgOffsetRef.current+=(0.6+levelRef.current*0.1)*frameScale;
       const reached=monstersRef.current.filter(m=>m.y>=88);
       const remaining=monstersRef.current.filter(m=>m.y<88);
       if(reached.length>0){
         reached.forEach(m=>spawnDamageParticles(m.x,82));
         livesRef.current=Math.max(0,livesRef.current-reached.length);setLives(livesRef.current);
         monstersRef.current=remaining;setShakeField(true);setTimeout(()=>setShakeField(false),500);
-        if(livesRef.current<=0){clearInterval(levelCheck);cleanup();renderCanvas();setTimeout(()=>{db.saveGameScore({gameType:'monster',score:scoreRef.current,level:levelRef.current,wordsTyped:killedRef.current,accuracy:killedRef.current>0?100:0,duration:0});setGameState('result');},600);return;}
+        if(livesRef.current<=0){cleanup();renderCanvas();setTimeout(()=>{db.saveGameScore({gameType:'monster',score:scoreRef.current,level:levelRef.current,wordsTyped:killedRef.current,accuracy:killedRef.current>0?100:0,duration:0});setGameState('result');},600);return;}
       }
       renderCanvas();
       frameRef.current=requestAnimationFrame(gameLoop);
@@ -572,24 +578,28 @@ export default function MonsterGamePage(){
 
   // ─── SELECT ──────────────────────────────────────────────────────────────────
   if(gameState==='select') return (
-    <div style={{paddingBottom:32}}>
-      <div className="page-header"><div><h1 className="page-title">Đánh Quái ⚔️</h1><p className="page-subtitle">6 quái thú tiến hóa 3 cấp — gõ đúng từ để tiêu diệt!</p></div></div>
+    <div className="lf-training-page lf-monster-page" style={{paddingBottom:32}}>
+      <div className="page-header lf-training-hero"><div><span className="lf-training-eyebrow">VỪA CHƠI VỪA NHỚ TỪ</span><h1 className="page-title">Gõ đúng từ. <em>Hạ đúng quái.</em></h1><p className="page-subtitle">Quái đang tiến gần. Hãy dùng <strong>vốn từ của bạn để giữ vững ba mạng.</strong></p><div className="lf-training-tags"><span>3 mạng</span><span>Combo thưởng</span><span>Quái tiến hóa</span></div></div><div className="lf-monster-hero-beast" aria-hidden="true">👾</div></div>
       <div style={{padding:'24px 32px'}}>
-        <div className="card" style={{maxWidth:520}}>
-          <h3 style={{marginBottom:20}}>⚙️ Cài Đặt</h3>
-          <div className="form-group" style={{marginBottom:16}}>
-            <label className="form-label">Ngôn ngữ gõ</label>
+        <div className="card lf-monster-setup-card" style={{maxWidth:'none'}}>
+          <div className="lf-monster-left">
+          <div className="lf-monster-setup-title"><h3>Chuẩn bị trận chiến</h3><p>Chọn chiều gõ và bộ từ bạn muốn dùng để chiến đấu.</p></div>
+          <div className="form-group lf-monster-lang" style={{marginBottom:16}}>
+            <label className="form-label lf-monster-step-label"><span>1</span> Gõ ngôn ngữ nào?</label>
             <div style={{display:'flex',gap:8}}>
-              {(['en','vi'] as InputLang[]).map(lang=>(<button key={lang} onClick={()=>setInputLang(lang)} style={{flex:1,padding:10,borderRadius:8,fontFamily:'inherit',fontSize:14,cursor:'pointer',border:`1px solid ${inputLang===lang?'var(--accent)':'var(--border)'}`,background:inputLang===lang?'rgba(99,102,241,0.12)':'var(--bg-secondary)',color:inputLang===lang?'var(--accent-bright)':'var(--text-secondary)'}}>{lang==='en'?'🇺🇸 Gõ Tiếng Anh':'🇻🇳 Gõ Tiếng Việt'}</button>))}
+              {(['en','vi'] as InputLang[]).map(lang=>(<button key={lang} type="button" aria-pressed={inputLang===lang} onClick={()=>setInputLang(lang)}><strong>{lang==='en'?'Gõ tiếng Anh':'Gõ tiếng Việt'}</strong><small>{lang==='en'?'Nhìn nghĩa tiếng Việt':'Nhìn từ tiếng Anh'}</small></button>))}
             </div>
           </div>
-          <div className="form-group" style={{marginBottom:20}}>
-            <label className="form-label">Nhóm từ (bỏ trống = tất cả)</label>
+          <div className="form-group lf-monster-groups" style={{marginBottom:20}}>
+            <label className="form-label lf-monster-step-label"><span>2</span> Chọn nhóm từ</label>
             <div style={{display:'flex',flexDirection:'column',gap:6,maxHeight:180,overflowY:'auto'}}>
-              {groups.map(g=>(<button key={g.Id} onClick={()=>toggleGroup(g.Id)} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',cursor:'pointer',borderRadius:8,fontFamily:'inherit',fontSize:13,textAlign:'left',border:`1px solid ${selectedGroups.includes(g.Id)?g.Color:'var(--border)'}`,background:selectedGroups.includes(g.Id)?`${g.Color}18`:'var(--bg-secondary)',color:'var(--text-primary)'}}><span>{g.Icon}</span><span>{g.Name}</span><span style={{fontSize:11,color:'var(--text-muted)',marginLeft:'auto'}}>{g.WordCount} từ</span>{selectedGroups.includes(g.Id)&&<span style={{color:'var(--green)'}}>✓</span>}</button>))}
+              {groups.map(g=>(<button key={g.Id} aria-pressed={selectedGroups.includes(g.Id)} onClick={()=>toggleGroup(g.Id)}><span>{g.Icon}</span><span>{g.Name}</span><span>{g.WordCount} từ</span>{selectedGroups.includes(g.Id)&&<span>✓</span>}</button>))}
             </div>
           </div>
-          <div style={{background:'var(--bg-secondary)',borderRadius:8,padding:14,marginBottom:12}}>
+          <div className="lf-monster-launch-row"><div><strong>Sẵn sàng giữ thành trì?</strong><small>Gõ đáp án và nhấn Enter để tấn công.</small></div><button className="btn btn-primary btn-lg lf-monster-launch" onClick={startGame}>Vào trận →</button></div>
+          </div>
+          <div className="lf-monster-right">
+          <div className="lf-monster-bestiary-title"><h3>Quái thú bạn sẽ gặp</h3><p>Sáu dáng quái mở dần khi lên cấp.</p></div><div className="lf-monster-bestiary" style={{background:'var(--bg-secondary)',borderRadius:8,padding:14,marginBottom:12}}>
             <div style={{fontSize:12,fontWeight:600,marginBottom:10}}>👾 Quái Thú (mở khóa dần theo cấp)</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
               {MONSTERS_DATA.map((m,i)=>(
@@ -601,22 +611,22 @@ export default function MonsterGamePage(){
               ))}
             </div>
           </div>
-          <div style={{background:'var(--bg-secondary)',borderRadius:8,padding:14,marginBottom:12}}>
-            <div style={{fontSize:12,fontWeight:600,marginBottom:8}}>⚡ Hệ Tiến Hóa</div>
+          <div className="lf-monster-tiers" style={{background:'var(--bg-secondary)',borderRadius:8,padding:14,marginBottom:12}}>
+            <div style={{fontSize:12,fontWeight:600,marginBottom:8}}>⚡ Hệ tiến hóa</div>
             <div style={{display:'flex',gap:8}}>
-              {[['Thường','#6b7280','1 lần','Nhỏ'],['Elite','#22d3ee','2 lần','To hơn · +18đ'],['Boss','#f59e0b','3 lần','Khổng lồ · +35đ']].map(([t,c,h,d])=>(
+              {[['Thường','#6b7280','Gõ 1 lần','Quái nhỏ'],['Tinh anh','#22d3ee','Gõ 2 lần','To hơn, thưởng 18 điểm'],['Trùm','#f59e0b','Gõ 3 lần','Lớn hơn, thưởng 35 điểm']].map(([t,c,h,d])=>(
                 <div key={t} style={{flex:1,textAlign:'center',padding:'8px 4px',borderRadius:6,background:`${c}14`,border:`1px solid ${c}44`}}>
                   <div style={{fontSize:11,fontWeight:700,color:c}}>{t}</div>
-                  <div style={{fontSize:10,color:'var(--text-muted)',marginTop:2}}>{h} · {d}</div>
+                  <div className="lf-monster-tier-note" style={{marginTop:2}}><strong>{h}</strong><span>{d}</span></div>
                 </div>
               ))}
             </div>
           </div>
-          <div style={{background:'var(--bg-secondary)',borderRadius:8,padding:14,marginBottom:16}}>
+          <div className="lf-monster-rules" style={{background:'var(--bg-secondary)',borderRadius:8,padding:14,marginBottom:16}}>
             <div style={{fontSize:12,fontWeight:600,marginBottom:6}}>📜 Luật chơi</div>
-            {['Quái thú rơi xuống — gõ đúng từ vựng + Enter','Combo 3+: bonus điểm, combo 5+: bonus lớn','Quái chạm đáy → mất 1 mạng (3 mạng)','Mỗi 10 quái diệt: level up, xuất hiện quái mới','Elite & Boss từ level 3+ — to hơn, máu hơn'].map(r=>(<div key={r} style={{fontSize:11,color:'var(--text-secondary)',padding:'2px 0'}}>• {r}</div>))}
+            {['Gõ đáp án rồi nhấn Enter để hạ quái','Đúng liên tiếp 3 hoặc 5 lần sẽ được thêm điểm','Quái chạm đáy khiến bạn mất một trong ba mạng','Hạ 10 quái để lên cấp và gặp quái mới','Từ cấp 3, quái tinh anh và trùm sẽ xuất hiện'].map((rule,index)=>(<div className="lf-monster-rule" key={rule}><span>{index+1}</span><p>{rule}</p></div>))}
           </div>
-          <button className="btn btn-primary btn-lg w-full" onClick={startGame}>⚔️ Bắt Đầu Chiến!</button>
+          </div>
         </div>
       </div>
     </div>
@@ -624,10 +634,10 @@ export default function MonsterGamePage(){
 
   // ─── RESULT ──────────────────────────────────────────────────────────────────
   if(gameState==='result') return (
-    <div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'80vh',padding:32}}>
-      <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:20,padding:40,maxWidth:420,width:'100%',textAlign:'center'}}>
-        <div style={{fontSize:64,marginBottom:8}}>💀</div>
-        <h2 style={{fontSize:24,fontWeight:700,marginBottom:8}}>Game Over!</h2>
+    <div className="lf-monster-result" style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'80vh',padding:32}}>
+      <div className="lf-monster-result-card" style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:20,padding:40,maxWidth:420,width:'100%',textAlign:'center'}}>
+        <div style={{fontSize:64,marginBottom:8}}>✦</div>
+        <h2 style={{fontSize:24,fontWeight:700,marginBottom:8}}>Trận chiến kết thúc</h2>
         <p style={{color:'var(--text-secondary)',fontSize:14,marginBottom:28}}>{killed>=30?'🔥 Huyền Thoại!':killed>=15?'⚔️ Chiến Binh Dũng Cảm!':'💪 Cố Lên Lần Sau!'}</p>
         <div style={{display:'flex',justifyContent:'center',gap:28,marginBottom:28}}>
           {([['Điểm',score,'#6366f1'],['Quái Diệt',killed,'#10b981'],['Cấp Độ',level,'#f59e0b']] as const).map(([l,v,c])=>(<div key={l} style={{display:'flex',flexDirection:'column',gap:4,alignItems:'center'}}><div style={{fontSize:36,fontWeight:700,color:c,fontFamily:'JetBrains Mono,monospace'}}>{v}</div><div style={{fontSize:12,color:'var(--text-secondary)'}}>{l}</div></div>))}

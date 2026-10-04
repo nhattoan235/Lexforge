@@ -1,43 +1,15 @@
-:root {
-  color-scheme: dark;
-  font-family: "Segoe UI", system-ui, sans-serif;
-}
+@import url("popup-theme.css");
 
 * { box-sizing: border-box; }
-
-html, body {
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  overflow: hidden;
-  background: transparent;
-}
-
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; }
 body { padding: 2px; }
-
 .preview {
-  width: 100%;
-  padding: 10px 13px 11px;
-  border: 1px solid #53617a;
-  border-left: 3px solid #f0546d;
-  border-radius: 11px;
-  background: #202638;
-  color: #f5f6fb;
+  width: 100%; padding: 10px 13px 11px;
+  border: 1px solid var(--popup-border); border-left: 3px solid var(--popup-accent);
+  border-radius: 11px; background: var(--popup-bg); color: var(--popup-text);
   pointer-events: none;
 }
-
-.preview-caption {
-  color: #ff8ca0;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.9px;
-}
-
-.preview p {
-  margin: 5px 0 0;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
+.preview-caption { color: var(--popup-accent); font-size: 10px; font-weight: 850; letter-spacing: .9px; }
+.preview[data-failed="true"] { border-left-color: var(--popup-danger); }
+.preview[data-failed="true"] .preview-caption { color: var(--popup-danger); }
+.preview p { margin: 5px 0 0; font-size: 14px; font-weight: 650; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-wrap; }

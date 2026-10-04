@@ -3,6 +3,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../services/database';
 import { WordGroup, GROUP_COLORS } from '../types';
 import { useApp } from '../App';
+import { FolderOpen, BookOpen, Plus, Search, ArrowRight, Moon, Sun, Pencil, Trash2 } from 'lucide-react';
+import ConfirmDialog from '../components/Feedback/ConfirmDialog';
+import './GroupsPage.css';
+import './GroupsApproved.css';
 
 type SortBy = 'newest' | 'oldest' | 'most_words' | 'least_words' | 'name_az';
 
@@ -21,6 +25,9 @@ export default function GroupsPage() {
   const [sortBy, setSortBy] = useState<SortBy>('newest');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [page, setPageNumber] = useState(1);
+  const { theme, setTheme } = useApp();
+  const dark = theme === 'dark';
 
   // Bulk create
   const [showBulkModal, setShowBulkModal] = useState(false);
@@ -120,59 +127,53 @@ export default function GroupsPage() {
 
   const bulkLineCount = bulkText.split('\n').filter(l => l.trim()).length;
   const hasFilter = search || dateFrom || dateTo;
+  const pageSize = 9;
+  const pageCount = Math.max(1, Math.ceil(filteredGroups.length / pageSize));
+  const visiblePage = Math.min(page, pageCount);
+  const pageGroups = filteredGroups.slice((visiblePage - 1) * pageSize, visiblePage * pageSize);
+  const viewGroup = (id: number) => {
+    localStorage.setItem('default_filter_group_id', String(id));
+    setPage('vocabulary');
+  };
+  useEffect(() => setPageNumber(1), [search, sortBy, dateFrom, dateTo]);
 
   return (
-    <div className="groups-page">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Nhóm Từ Vựng 📁</h1>
-          <p className="page-subtitle">
-            Tổ chức từ vựng theo chủ đề · {filteredGroups.length}/{groups.length} nhóm
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-secondary" onClick={() => setShowBulkModal(true)}>
-            📁+ Thêm Hàng Loạt
-          </button>
-          <button className="btn btn-primary" onClick={openCreate}>+ Tạo Nhóm Mới</button>
-        </div>
-      </div>
+    <div className={`groups-page lf-groups${dark ? ' dark' : ''}`}>
+      <header className="lf-groups-topbar"><div><span>BỘ TỪ CÁ NHÂN</span><b>Nhóm từ</b></div><button type="button" onClick={() => setTheme(dark ? 'light' : 'dark')}>{dark ? <Sun size={17}/> : <Moon size={17}/>} {dark ? 'Sáng' : 'Tối'}</button></header>
+      <div className="lf-groups-body"><section className="lf-groups-hero"><div className="lf-groups-art" aria-hidden="true"><span className="back"><small>NHÓM TỪ</small><b>Giao tiếp</b><i>appointment</i></span><span className="front"><small>NHÓM TỪ</small><b>TOEIC Công việc</b><i>deadline · negotiate</i></span><em>✦</em></div><div className="lf-groups-hero-main"><span>SẮP XẾP ĐỂ HỌC NHANH HƠN</span><h1><em>Nhóm từ</em> của bạn</h1><p>Gom đúng chủ đề. <strong>Nhớ đúng ngữ cảnh.</strong></p><div><button type="button" onClick={() => setShowBulkModal(true)}>Tạo nhiều nhóm</button><button type="button" className="primary" onClick={openCreate}><Plus size={16}/> Tạo nhóm mới</button></div></div><div className="lf-groups-hero-stats"><div><FolderOpen size={21}/><b>{groups.length}</b><small>Nhóm đang có</small></div><div><BookOpen size={21}/><b>{groups.reduce((sum, group) => sum + (group.WordCount || 0), 0)}</b><small>Từ trong các nhóm</small></div><div><Plus size={21}/><b>{groups.filter(group => !group.WordCount).length}</b><small>Nhóm chưa có từ</small></div></div></section>
 
       {/* Filter toolbar */}
-      <div style={{ display: 'flex', gap: 10, padding: '12px 32px 0', flexWrap: 'wrap', alignItems: 'center' }}>
-        <input
-          className="input"
-          style={{ flex: 1, minWidth: 160, maxWidth: 260 }}
-          placeholder="🔍 Tìm nhóm..."
+      <div className="lf-groups-toolbar">
+        <label><span>TÌM NHÓM</span><div><Search size={17}/><input
+          className="input" placeholder="Tên hoặc mô tả nhóm"
           value={search}
           onChange={e => setSearch(e.target.value)}
-        />
-        <select className="select" value={sortBy} onChange={e => setSortBy(e.target.value as SortBy)}
-          style={{ width: 170 }}>
+        /></div></label>
+        <label><span>SẮP XẾP</span><select className="select" value={sortBy} onChange={e => setSortBy(e.target.value as SortBy)}>
           <option value="newest">📅 Mới nhất</option>
           <option value="oldest">📅 Cũ nhất</option>
           <option value="most_words">📈 Nhiều từ nhất</option>
           <option value="least_words">📉 Ít từ nhất</option>
           <option value="name_az">🔤 Tên A-Z</option>
-        </select>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Từ:</span>
+        </select></label>
+        <label><span>TỪ NGÀY</span>
           <input type="date" className="input" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-            style={{ width: 148, fontSize: 13, padding: '7px 10px' }} />
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Đến:</span>
+             />
+        </label>
+        <label><span>ĐẾN NGÀY</span>
           <input type="date" className="input" value={dateTo} onChange={e => setDateTo(e.target.value)}
-            style={{ width: 148, fontSize: 13, padding: '7px 10px' }} />
-        </div>
+             />
+        </label>
+        <div className="lf-groups-filter-foot"><strong>{filteredGroups.length} nhóm</strong> đang hiển thị
         {hasFilter && (
-          <button className="btn btn-secondary" style={{ fontSize: 12, padding: '7px 12px' }}
+          <button type="button"
             onClick={() => { setSearch(''); setDateFrom(''); setDateTo(''); }}>
-            ✕ Xóa bộ lọc
+            Xóa bộ lọc
           </button>
-        )}
+        )}</div>
       </div>
 
+      <div className="lf-groups-section"><h2>Các nhóm từ của bạn</h2><p>Chọn một nhóm để xem từ hoặc thêm từ mới</p></div>
       <div className="groups-content">
         {loading ? (
           <div className="empty-state">⏳ Đang tải...</div>
@@ -186,19 +187,16 @@ export default function GroupsPage() {
           </div>
         ) : (
           <div className="groups-grid">
-            {filteredGroups.map(g => (
+            {pageGroups.map(g => (
               <div key={g.Id} className="group-card" style={{ '--group-color': g.Color } as any}>
                 <div className="group-top">
                   <div className="group-icon-wrap" style={{ background: `${g.Color}22`, border: `1px solid ${g.Color}44` }}>
                     <span className="group-icon">{g.Icon}</span>
                   </div>
-                  <div className="group-actions">
-                    <button className="btn btn-icon btn-secondary btn-sm"
-                      onClick={() => handleAddWordToGroup(g.Id)} title="Thêm từ vào nhóm">➕</button>
-                    <button className="btn btn-icon btn-secondary btn-sm"
-                      onClick={() => openEdit(g)} title="Chỉnh sửa">✏️</button>
-                    <button className="btn btn-icon btn-danger btn-sm"
-                      onClick={() => setDeleteConfirm(g.Id)} title="Xóa">🗑️</button>
+                  <div className="group-actions lf-group-card-actions">
+                    <button className="btn btn-icon btn-secondary btn-sm" onClick={() => handleAddWordToGroup(g.Id)} title="Thêm từ vào nhóm" aria-label={`Thêm từ vào ${g.Name}`}><Plus size={16}/></button>
+                    <button className="btn btn-icon btn-secondary btn-sm" onClick={() => openEdit(g)} title="Chỉnh sửa" aria-label={`Sửa ${g.Name}`}><Pencil size={15}/></button>
+                    <button className="btn btn-icon btn-danger btn-sm" onClick={() => setDeleteConfirm(g.Id)} title="Xóa" aria-label={`Xóa ${g.Name}`}><Trash2 size={15}/></button>
                   </div>
                 </div>
                 <h3 className="group-name">{g.Name}</h3>
@@ -209,17 +207,20 @@ export default function GroupsPage() {
                     <span> từ vựng</span>
                   </div>
                   {g.CreatedAt && (
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                    <span className="lf-group-created" style={{ marginLeft: 'auto' }}>
                       {new Date(g.CreatedAt).toLocaleDateString('vi-VN')}
                     </span>
                   )}
                 </div>
+                <button type="button" className="lf-group-view" onClick={() => viewGroup(g.Id)}>Xem từ trong nhóm <ArrowRight size={15}/></button>
                 <div className="group-bar" style={{ background: g.Color }} />
               </div>
             ))}
           </div>
         )}
       </div>
+      {filteredGroups.length > pageSize && <nav className="lf-groups-pages" aria-label="Phân trang nhóm từ"><span>Trang {visiblePage} / {pageCount}</span><button type="button" disabled={visiblePage === 1} onClick={() => setPageNumber(visiblePage - 1)}>← Trước</button>{Array.from({ length: pageCount }, (_, index) => <button type="button" key={index} className={visiblePage === index + 1 ? 'active' : ''} aria-current={visiblePage === index + 1 ? 'page' : undefined} onClick={() => setPageNumber(index + 1)}>{index + 1}</button>)}<button type="button" disabled={visiblePage === pageCount} onClick={() => setPageNumber(visiblePage + 1)}>Sau →</button></nav>}
+      <section className="lf-groups-next"><div><h2>Nhóm đã sẵn sàng. Giờ thêm từ vào học.</h2><p>Mở thư viện từ vựng để thêm từ mới hoặc nhập danh sách Excel vào nhóm của bạn.</p></div><button type="button" onClick={() => setPage('vocabulary')}>Mở Từ vựng <ArrowRight size={16}/></button></section></div>
 
       {/* ── Create/Edit Modal ─────────────────────────── */}
       {showModal && (
@@ -326,27 +327,7 @@ export default function GroupsPage() {
       )}
 
       {/* ── Delete Confirm ────────────────────────────── */}
-      {deleteConfirm && (
-        <div className="modal-overlay" onClick={() => setDeleteConfirm(null)}>
-          <div className="modal" style={{ maxWidth: 380 }} onClick={e => e.stopPropagation()}>
-            <div className="modal-body" style={{ textAlign: 'center', gap: 20 }}>
-              <div style={{ fontSize: 48 }}>⚠️</div>
-              <div>
-                <h3>Xóa Nhóm Từ?</h3>
-                <p style={{ color: 'var(--text-secondary)', marginTop: 8, fontSize: 14 }}>
-                  Tất cả từ vựng trong nhóm này sẽ bị xóa vĩnh viễn!
-                </p>
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setDeleteConfirm(null)}>Hủy</button>
-              <button className="btn btn-danger" onClick={() => handleDelete(deleteConfirm)}>
-                🗑️ Xác Nhận Xóa
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {deleteConfirm !== null && <ConfirmDialog tone="danger" title="Xóa nhóm từ?" description="Tất cả từ trong nhóm cũng sẽ bị xóa vĩnh viễn. Hãy chắc chắn trước khi tiếp tục." confirmLabel="Xóa nhóm và từ" cancelLabel="Giữ lại" onCancel={() => setDeleteConfirm(null)} onConfirm={() => handleDelete(deleteConfirm)} />}
 
       <style>{`
         .groups-page { padding-bottom: 32px; }

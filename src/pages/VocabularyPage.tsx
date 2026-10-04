@@ -6,11 +6,18 @@ import { speechService } from '../services/speech';
 import { Word, WordGroup, PART_OF_SPEECH, GROUP_COLORS } from '../types';
 import { useApp } from '../App';
 import { aiVocabService, CATEGORIES, DEFAULT_TOPICS } from '../services/aiVocabService';
+import { BookOpen, FolderOpen, CheckCircle2, Search, Download, Upload, Sparkles, Plus, Volume2, Trash2, ArrowRight, Moon, Sun, Layers } from 'lucide-react';
+import ConfirmDialog from '../components/Feedback/ConfirmDialog';
+import { notify } from '../components/Feedback/ToastHost';
+import './VocabularyPage.css';
+import './VocabularyApproved.css';
 
 const EMOJI_ICONS_V = ['📖','⭐','⚡','🎯','🏆','🧠','💡','📈','🌍','💬','🔥','✨','🎓','📝','🌟'];
 
 export default function VocabularyPage() {
-  const { triggerRefresh } = useApp();
+  const { triggerRefresh, setPage } = useApp();
+  const { theme, setTheme } = useApp();
+  const dark = theme === 'dark';
   const [words, setWords] = useState<Word[]>([]);
   const [groups, setGroups] = useState<WordGroup[]>([]);
   const [filterGroup, setFilterGroup] = useState<number | 'all'>('all');
@@ -53,6 +60,11 @@ export default function VocabularyPage() {
 
   useEffect(() => {
     loadData().then(() => {
+      const filterGroupId = localStorage.getItem('default_filter_group_id');
+      if (filterGroupId) {
+        localStorage.removeItem('default_filter_group_id');
+        setFilterGroup(Number(filterGroupId));
+      }
       // Check if navigated here from GroupsPage via "Add Word" button
       const defaultGroupId = localStorage.getItem('default_add_word_group_id');
       if (defaultGroupId) {
@@ -225,7 +237,7 @@ export default function VocabularyPage() {
     setSelectedWords(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
   const toggleSelectAll = () =>
-    setSelectedWords(prev => prev.length === filteredWords.length ? [] : filteredWords.map(w => w.Id));
+    setSelectedWords(prev => filteredWords.every(w => prev.includes(w.Id)) ? prev.filter(id => !filteredWords.some(w => w.Id === id)) : [...new Set([...prev, ...filteredWords.map(w => w.Id)])]);
 
   const handleDelete = async (id: number) => {
     await db.deleteWord(id);
@@ -334,7 +346,7 @@ export default function VocabularyPage() {
     setImportSaving(false);
     setShowImportDialog(false);
     setImportData(null);
-    alert(`✅ Import thành công ${count} từ vựng!`);
+    notify(`Đã nhập thành công ${count} từ vựng.`, 'success');
     loadData();
     triggerRefresh();
   };
@@ -356,24 +368,24 @@ export default function VocabularyPage() {
   const levelLabel = (level: number) => ['Mới', 'Cơ bản', 'Đang học', 'Quen', 'Thuộc', 'Thành thạo'][level] || 'Mới';
 
   return (
-    <div className="vocab-page">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Từ Vựng 📖</h1>
-          <p className="page-subtitle">{words.length} từ tổng cộng · {filteredWords.length} đang hiển thị</p>
-        </div>
-        <div className="flex gap-2" style={{ display: 'flex', gap: '8px' }}>
+    <div className={`vocab-page lf-vocab${dark ? ' dark' : ''}`}>
+      <header className="lf-vocab-topbar"><div><span>BỘ TỪ CÁ NHÂN</span><b>Từ vựng</b></div><button type="button" onClick={() => setTheme(dark ? 'light' : 'dark')}>{dark ? <Sun size={17} /> : <Moon size={17} />}{dark ? 'Sáng' : 'Tối'}</button></header>
+      <div className="lf-vocab-body">
+      <section className="lf-vocab-hero">
+        <div className="lf-vocab-hero-art" aria-hidden="true"><div className="lf-vocab-art-halo" /><div className="lf-vocab-word-card back"><small>LEXFORGE / WORDBOOK</small><b>learn</b><span>học mỗi ngày</span></div><div className="lf-vocab-word-card front"><small>WORD OF THE DAY</small><b>accomplish</b><span>/əˈkʌmplɪʃ/ · hoàn thành</span></div><i>✦</i></div>
+        <div className="lf-vocab-hero-main"><div><span className="lf-vocab-eyebrow">THƯ VIỆN TỪ VỰNG</span><h1><em>Từ vựng</em> của bạn</h1><p>Chắc từng từ. <strong>Chuẩn từng câu.</strong></p></div><div className="lf-vocab-hero-actions">
           <input ref={fileRef} type="file" accept=".xlsx,.csv" style={{ display: 'none' }} onChange={handleImport} />
-          <button className="btn btn-secondary" onClick={() => fileRef.current?.click()}>📥 Import Excel</button>
-          <button className="btn btn-secondary" onClick={handleExport}>📤 Export</button>
-          <button className="btn btn-secondary" style={{ borderColor: 'rgba(99,102,241,0.4)', background: 'rgba(99,102,241,0.06)', color: 'var(--accent-bright)' }} onClick={openAiGen}>🪄 Sinh Từ AI</button>
-          <button className="btn btn-primary" onClick={openCreate}>+ Thêm Từ</button>
-        </div>
-      </div>
+          <button type="button" onClick={() => fileRef.current?.click()}><Upload size={16} /> Nhập Excel</button>
+          <button type="button" onClick={handleExport}><Download size={16} /> Xuất danh sách</button>
+          <button type="button" onClick={openAiGen}><Sparkles size={16} /> Tạo từ bằng AI</button>
+          <button type="button" className="primary" onClick={openCreate}><Plus size={17} /> Thêm từ</button>
+        </div></div>
+        <div className="lf-vocab-summary"><div><span><BookOpen size={22}/></span><strong>{words.length}</strong><small>Từ trong thư viện</small></div><div><span><FolderOpen size={22}/></span><strong>{groups.length}</strong><small>Nhóm từ đang dùng</small></div><div><span><CheckCircle2 size={22}/></span><strong>{words.filter(w => w.Level >= 4).length}</strong><small>Từ đã thuộc</small></div></div>
+      </section>
 
-      <div className="vocab-toolbar">
-        <input className="input search-input" placeholder="🔍 Tìm kiếm từ vựng..." value={search} onChange={e => setSearch(e.target.value)} />
-        <select className="select group-filter" value={filterGroup} onChange={e => {
+      <section className="lf-vocab-workspace" aria-label="Danh sách từ vựng"><div className="vocab-toolbar">
+        <label className="lf-vocab-search"><Search size={18}/><input className="input search-input" placeholder="Tìm từ tiếng Anh hoặc nghĩa tiếng Việt" value={search} onChange={e => setSearch(e.target.value)} /></label>
+        <select className="select group-filter" aria-label="Lọc nhóm từ" value={filterGroup} onChange={e => {
           const val = e.target.value;
           if (val === 'all') {
             setFilterGroup('all');
@@ -386,38 +398,28 @@ export default function VocabularyPage() {
           <option value="all">Tất cả nhóm</option>
           {groups.map(g => <option key={g.Id} value={g.Id}>{g.Icon} {g.Name}</option>)}
         </select>
-      </div>
+      </div><div className="lf-vocab-results"><span><strong>{filteredWords.length} từ</strong> đang hiển thị</span><span>Bấm vào một hàng để sửa từ</span><details><summary>Định dạng file nhập <ArrowRight size={14}/></summary><p>File Excel cần có cột English và Vietnamese. Có thể thêm Pronunciation, PartOfSpeech, Example, ExampleVi.</p></details></div>
       {/* Selection action bar */}
       {selectedWords.length > 0 && (
-        <div style={{
-          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-          background: 'var(--bg-card)', border: '1.5px solid var(--accent)', borderRadius: 12,
-          padding: '10px 20px', display: 'flex', alignItems: 'center', gap: 16,
-          boxShadow: '0 4px 24px rgba(99,102,241,0.2)', zIndex: 100,
-        }}>
-          <span style={{ fontSize: 14, fontWeight: 600 }}>✅ Đã chọn {selectedWords.length} từ</span>
-          <button className="btn btn-secondary" style={{ fontSize: 13 }}
+        <div className="lf-vocab-bulk">
+          <span>Đã chọn <strong>{selectedWords.length} từ</strong></span>
+          <button type="button"
             onClick={() => { setMoveTargetGroup(groups[0]?.Id || 0); setShowMoveModal(true); }}>
-            📁 Chuyển nhóm
+            Chuyển nhóm
           </button>
-          <button className="btn btn-secondary" style={{ fontSize: 13 }}
+          <button type="button"
             onClick={() => setSelectedWords([])}>
-            ✕ Bỏ chọn
+            Bỏ chọn
           </button>
         </div>
       )}
-
-
-      <div className="import-hint">
-        💡 File Excel cần có cột: <code>English</code>, <code>Vietnamese</code>, <code>Pronunciation</code>, <code>PartOfSpeech</code>, <code>Example</code>, <code>ExampleVi</code>
-      </div>
-
       <div className="vocab-content">
         {loading ? <div className="loading-center">⏳ Đang tải...</div>
           : filteredWords.length === 0 ? (
             <div className="empty-state">
-              <div style={{ fontSize: 64 }}>📖</div>
-              <p>Chưa có từ vựng nào{search ? ' phù hợp' : ''}</p>
+              <BookOpen size={49}/>
+              <h2>{search || filterGroup !== 'all' ? 'Không tìm thấy từ phù hợp' : 'Chưa có từ nào'}</h2>
+              <p>{search || filterGroup !== 'all' ? 'Thử đổi bộ lọc hoặc từ khóa tìm kiếm.' : 'Thêm từ đầu tiên hoặc nhập danh sách Excel để bắt đầu.'}</p>
               <button className="btn btn-primary" onClick={openCreate}>Thêm từ đầu tiên</button>
             </div>
           ) : (
@@ -427,29 +429,30 @@ export default function VocabularyPage() {
                   <tr>
                     <th style={{ width: 36 }}>
                       <input type="checkbox" style={{ cursor: 'pointer' }}
-                        checked={selectedWords.length === filteredWords.length && filteredWords.length > 0}
+                        checked={filteredWords.length > 0 && filteredWords.every(w => selectedWords.includes(w.Id))}
                         onChange={toggleSelectAll} />
                     </th>
-                    <th>Tiếng Anh</th><th>Phiên Âm</th><th>Nghĩa</th>
-                    <th>Từ loại</th><th>Nhóm</th><th>Cấp độ</th><th>Thao tác</th>
+                    <th>Tiếng Anh</th><th>Phiên âm</th><th>Nghĩa tiếng Việt</th>
+                    <th>Từ loại</th><th>Nhóm</th><th>Cấp độ</th><th>Xóa</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredWords.map(w => (
-                    <tr key={w.Id} className={`word-row${selectedWords.includes(w.Id) ? ' selected' : ''}`}>
+                    <tr key={w.Id} className={`word-row${selectedWords.includes(w.Id) ? ' selected' : ''}`} tabIndex={0} onClick={() => openEdit(w)} onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openEdit(w); } }}>
                       <td style={{ width: 36, textAlign: 'center' }}>
                         <input type="checkbox" style={{ cursor: 'pointer' }}
                           checked={selectedWords.includes(w.Id)}
-                          onChange={() => toggleSelectWord(w.Id)} />
+                          onClick={e => e.stopPropagation()} onChange={() => toggleSelectWord(w.Id)} aria-label={`Chọn từ ${w.English}`} />
                       </td>
                       <td>
                         <div className="english-cell">
                           <span className="english-word">{w.English}</span>
-                          <button className="speak-btn" onClick={() => speechService.speak(w.English)} title="Nghe phát âm">🔊</button>
+                          <button className="speak-btn" onClick={e => { e.stopPropagation(); speechService.speak(w.English); }} title="Nghe phát âm" aria-label={`Nghe phát âm ${w.English}`}><Volume2 size={17}/></button>
                         </div>
+                        {w.Example && <span className="lf-vocab-example" title={w.Example}>{w.Example}</span>}
                       </td>
                       <td><span className="pronunciation">{w.Pronunciation}</span></td>
-                      <td className="vietnamese">{w.Vietnamese}</td>
+                      <td className="vietnamese"><strong>{w.Vietnamese}</strong></td>
                       <td>{w.PartOfSpeech && <span className="pos-badge">{w.PartOfSpeech}</span>}</td>
                       <td>
                         <span className="group-tag" style={{ background: `${w.GroupColor}22`, color: w.GroupColor, border: `1px solid ${w.GroupColor}44` }}>
@@ -458,13 +461,12 @@ export default function VocabularyPage() {
                       </td>
                       <td>
                         <span className="level-badge" style={{ color: levelColor(w.Level) }}>
-                          {'★'.repeat(Math.max(1, w.Level))} {levelLabel(w.Level)}
+                          {levelLabel(w.Level)}
                         </span>
                       </td>
                       <td>
                         <div className="row-actions">
-                          <button className="btn btn-icon btn-secondary btn-sm" onClick={() => openEdit(w)}>✏️</button>
-                          <button className="btn btn-icon btn-danger btn-sm" onClick={() => setDeleteConfirm(w.Id)}>🗑️</button>
+                          <button type="button" className="lf-vocab-delete" aria-label={`Xóa từ ${w.English}`} onClick={e => { e.stopPropagation(); setDeleteConfirm(w.Id); }}><Trash2 size={17}/></button>
                         </div>
                       </td>
                     </tr>
@@ -473,11 +475,13 @@ export default function VocabularyPage() {
               </table>
             </div>
           )}
+      </div><div className="lf-vocab-list-footer"><strong>{filteredWords.length} từ</strong> trong danh sách hiện tại<button type="button" onClick={() => document.querySelector('.lf-vocab-workspace')?.scrollIntoView({ behavior: 'smooth' })}>↑ Về đầu danh sách</button></div></section>
+      <section className="lf-vocab-next"><span><Layers size={26}/></span><div><h2>Lưu từ rồi, giờ luyện nhớ nhé</h2><p>Ôn nhanh bằng Flashcard hoặc mở nhóm từ để sắp xếp lại bộ từ của bạn.</p></div><button type="button" onClick={() => setPage('flashcard')}>Mở Flashcard <ArrowRight size={16}/></button></section>
       </div>
 
       {showModal && (
         <div className="modal-overlay" onClick={tryCloseModal}>
-          <div className="modal" style={{ maxWidth: 600 }} onClick={e => e.stopPropagation()}>
+          <div className="modal lf-vocab-form-modal" style={{ maxWidth: 600 }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{editWord ? '✏️ Chỉnh Sửa Từ' : '➕ Thêm Từ Mới'}</h2>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -574,52 +578,24 @@ export default function VocabularyPage() {
             <div className="modal-footer">
               <button tabIndex={9} className="btn btn-secondary" onClick={tryCloseModal}>Hủy</button>
               <button tabIndex={8} className="btn btn-primary" onClick={() => handleSave()} disabled={saving || !form.english || !form.groupId}>
-                {saving ? '🪄 AI đang tra từ...' : editWord ? '💾 Cập Nhật' : '➕ Thêm Từ'}
+                {saving ? '🪄 AI đang tra từ...' : editWord ? '💾 Cập Nhật' : <><Plus className="lf-vocab-save-plus" size={21} strokeWidth={3} /> Thêm Từ</>}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {deleteConfirm && (
-        <div className="modal-overlay" onClick={() => setDeleteConfirm(null)}>
-          <div className="modal" style={{ maxWidth: 360 }} onClick={e => e.stopPropagation()}>
-            <div className="modal-body" style={{ textAlign: 'center', gap: 16 }}>
-              <div style={{ fontSize: 48 }}>🗑️</div>
-              <h3>Xóa từ này?</h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Hành động này không thể hoàn tác.</p>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setDeleteConfirm(null)}>Hủy</button>
-              <button className="btn btn-danger" onClick={() => handleDelete(deleteConfirm)}>Xóa</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {deleteConfirm !== null && <ConfirmDialog tone="danger" title="Xóa từ này?" description="Từ sẽ được xóa khỏi thư viện và lịch ôn. Bạn không thể hoàn tác thao tác này." confirmLabel="Xóa từ" cancelLabel="Giữ lại" onCancel={() => setDeleteConfirm(null)} onConfirm={() => handleDelete(deleteConfirm)} />}
 
       {/* Close confirm dialog (replaces window.confirm to avoid Electron focus bug) */}
-      {showCloseConfirm && (
-        <div className="modal-overlay" onClick={() => setShowCloseConfirm(false)}>
-          <div className="modal" style={{ maxWidth: 360 }} onClick={e => e.stopPropagation()}>
-            <div className="modal-body" style={{ textAlign: 'center', gap: 16 }}>
-              <div style={{ fontSize: 48 }}>⚠️</div>
-              <h3>Hủy bỏ thay đổi?</h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Bạn có thay đổi chưa lưu. Bạn muốn hủy bỏ?</p>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowCloseConfirm(false)}>Tiếp tục chỉnh sửa</button>
-              <button className="btn btn-danger" onClick={confirmCloseModal}>Hủy bỏ</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {showCloseConfirm && <ConfirmDialog title="Bỏ các thay đổi?" description="Những thông tin bạn vừa nhập chưa được lưu. Nếu rời đi, bạn sẽ cần nhập lại." confirmLabel="Bỏ thay đổi" cancelLabel="Tiếp tục chỉnh sửa" onCancel={() => setShowCloseConfirm(false)} onConfirm={confirmCloseModal} />}
 
       {/* Move Words Modal */}
       {showMoveModal && (
         <div className="modal-overlay" onClick={() => setShowMoveModal(false)}>
-          <div className="modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+          <div className="modal lf-action-form" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>📁 Chuyển {selectedWords.length} Từ Sang Nhóm Khác</h2>
+              <h2>Chuyển {selectedWords.length} từ sang nhóm khác</h2>
               <button className="btn btn-icon btn-secondary" onClick={() => setShowMoveModal(false)}>✕</button>
             </div>
             <div className="modal-body">
@@ -641,9 +617,9 @@ export default function VocabularyPage() {
       {/* Import Dialog */}
       {showImportDialog && importData && (
         <div className="modal-overlay" onClick={() => !importSaving && setShowImportDialog(false)}>
-          <div className="modal" style={{ maxWidth: 500 }} onClick={e => e.stopPropagation()}>
+          <div className="modal lf-action-form" style={{ maxWidth: 500 }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>📥 Tùy Chọn Nhập {importData.length} Từ</h2>
+              <h2>Nhập {importData.length} từ vào thư viện</h2>
               <button className="btn btn-icon btn-secondary" disabled={importSaving} onClick={() => setShowImportDialog(false)}>✕</button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

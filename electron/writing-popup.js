@@ -2,6 +2,9 @@
   const api = window.writingPopupAPI;
   const popup = document.getElementById('popup');
   const suggestion = document.getElementById('suggestion');
+  const targetSentence = document.getElementById('target-sentence');
+  const suggestionLabel = document.getElementById('suggestion-label');
+  const shortcutHint = document.getElementById('shortcut-hint');
   const error = document.getElementById('error');
   const vietnamesePanel = document.getElementById('vietnamese-panel');
   const vietnameseInput = document.getElementById('vietnamese-input');
@@ -12,11 +15,27 @@
   const insertButton = document.getElementById('insert');
   const translateToggle = document.getElementById('translate-toggle');
   const dragHandle = document.querySelector('.popup-top');
+  const themeToggle = document.getElementById('theme-toggle');
   let revision = 0;
   let corrected = '';
   let english = '';
   let dragPointer = null;
   let dragOrigin = null;
+
+  function applyTheme(theme) {
+    const next = theme === 'dark' ? 'dark' : 'light';
+    document.documentElement.dataset.theme = next;
+    const label = next === 'dark' ? '☀ Sáng' : '☾ Tối';
+    themeToggle.textContent = label;
+    themeToggle.setAttribute('aria-label', `Chuyển sang giao diện ${next === 'dark' ? 'sáng' : 'tối'}`);
+    themeToggle.title = themeToggle.getAttribute('aria-label');
+  }
+  api.onThemeChange(applyTheme);
+  api.getTheme().then(applyTheme).catch(() => applyTheme('light'));
+  themeToggle.addEventListener('click', () => {
+    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    api.setTheme(next).then(applyTheme);
+  });
 
   dragHandle.addEventListener('pointerdown', (event) => {
     if (event.button !== 0 || event.target.closest('button')) return;
@@ -51,9 +70,16 @@
 
   api.onSuggestion((payload) => {
     revision = payload.revision;
-    corrected = payload.corrected;
+    const failed = typeof payload.failure === 'string' && Boolean(payload.failure);
+    corrected = failed ? '' : payload.corrected;
+    targetSentence.textContent = payload.original || '';
     english = '';
-    suggestion.textContent = corrected;
+    suggestionLabel.textContent = failed ? 'Chưa thể tạo gợi ý' : 'Câu đề xuất';
+    suggestion.dataset.failed = String(failed);
+    suggestion.textContent = failed ? payload.failure : corrected;
+    acceptButton.hidden = failed;
+    translateToggle.hidden = failed;
+    shortcutHint.hidden = failed;
     vietnameseInput.value = '';
     vietnamesePanel.hidden = true;
     translationResult.hidden = true;
@@ -87,7 +113,7 @@
     const button = action === '1' ? acceptButton : action === '3' ? translateToggle :
       action === '4' && !vietnamesePanel.hidden ? translateButton :
         action === '5' && !translationResult.hidden ? insertButton : null;
-    if (button && !button.disabled) button.click();
+    if (button && !button.disabled && !button.hidden) button.click();
   });
   vietnameseInput.addEventListener('input', () => {
     english = '';
@@ -96,6 +122,7 @@
   });
 
   acceptButton.addEventListener('click', async () => {
+    if (!corrected) return;
     acceptButton.disabled = true;
     const result = await api.apply(revision, 'replace', corrected);
     acceptButton.disabled = false;
@@ -122,8 +149,8 @@
   insertButton.addEventListener('click', async () => {
     if (!english) return;
     insertButton.disabled = true;
-    const result = await api.apply(revision, 'insert', english);
+    const result = await api.apply(revision, 'replaceTranslation', english);
     insertButton.disabled = false;
-    if (!result.success) showError(result.error || 'Không chèn được câu tiếng Anh.');
+    if (!result.success) showError(result.error || 'Không thay được câu đang viết.');
   });
 })();

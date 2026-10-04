@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { notify } from '../components/Feedback/ToastHost';
 import { db } from '../services/database';
 import { speechService } from '../services/speech';
+import './MemoryApproved.css';
 
 type GameState = 'select' | 'playing' | 'result';
 type Difficulty = 'easy' | 'medium' | 'hard';
@@ -53,10 +55,10 @@ export default function MemoryFlipPage() {
 
   const startGame = async () => {
     const res = selectedGroups.length > 0 ? await db.getWordsByGroups(selectedGroups) : await db.getWords();
-    if (!res.success || !res.data?.length) { alert('Không có từ nào!'); return; }
+    if (!res.success || !res.data?.length) { notify('Chưa có từ để chơi. Hãy thêm từ vào thư viện trước nhé.', 'info'); return; }
     const cfg = DIFFICULTY_CONFIG[difficulty];
     const pool = [...res.data].sort(() => Math.random() - 0.5).slice(0, cfg.pairs);
-    if (pool.length < cfg.pairs) { alert(`Cần ít nhất ${cfg.pairs} từ! Hiện có ${pool.length} từ.`); return; }
+    if (pool.length < cfg.pairs) { notify(`Cần ít nhất ${cfg.pairs} từ để chơi. Hiện có ${pool.length} từ.`, 'info'); return; }
 
     const newCards: Card[] = [];
     pool.forEach((word: any, i: number) => {
@@ -132,27 +134,27 @@ export default function MemoryFlipPage() {
   const accuracy = moves > 0 ? Math.round((matchedPairs / moves) * 100) : 100;
 
   if (gameState === 'select') return (
-    <div className="mf-select">
-      <div className="page-header">
-        <div><h1 className="page-title">Memory Flip 🃏</h1><p className="page-subtitle">Lật thẻ tìm cặp EN↔VI · Nhớ vị trí · Càng nhanh càng nhiều điểm</p></div>
+    <div className="mf-select lf-training-page lf-memory-page">
+      <div className="page-header lf-training-hero">
+        <div><span className="lf-training-eyebrow">LẬT THẺ · GHÉP NGHĨA · NHỚ LÂU</span><h1 className="page-title">Nhớ vị trí. <em>Nối đúng nghĩa.</em></h1><p className="page-subtitle">Tìm cặp tiếng Anh và tiếng Việt tương ứng <strong>trước khi hết giờ.</strong></p><div className="lf-training-tags"><span>3 mức độ</span><span>Combo thưởng</span><span>Ghép cặp Anh ↔ Việt</span></div></div><div className="lf-memory-hero-cards" aria-hidden="true"><span>EN</span><span>VI</span></div>
       </div>
-      <div style={{ padding: '24px 32px', display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20 }}>
+      <div className="lf-memory-setup-grid" style={{ padding: '24px 32px', display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20 }}>
         <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-          <h3>⚙️ Cài Đặt</h3>
+          <h3>Chuẩn bị ván chơi</h3><p className="lf-memory-intro">Chọn mức độ và nhóm từ để bắt đầu.</p>
           <div className="form-group">
-            <label className="form-label">Độ Khó</label>
+            <label className="form-label">1 · Chọn độ khó</label>
             <div style={{ display: 'flex', gap: 10 }}>
               {(Object.entries(DIFFICULTY_CONFIG) as [Difficulty, typeof DIFFICULTY_CONFIG.easy][]).map(([d, c]) => (
                 <button key={d} className={`diff-btn ${difficulty === d ? 'active' : ''}`} onClick={() => setDifficulty(d)}>
-                  <div style={{ fontSize: 20 }}>{d === 'easy' ? '😊' : d === 'medium' ? '😤' : '😈'}</div>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{d.charAt(0).toUpperCase() + d.slice(1)}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{c.desc}</div>
+                  <div className="lf-memory-difficulty-name">{d === 'easy' ? 'Dễ' : d === 'medium' ? 'Vừa' : 'Khó'}</div>
+                  <strong>{d === 'easy' ? 6 : d === 'medium' ? 10 : 18} cặp</strong>
+                  <div className="lf-memory-difficulty-time">{d === 'easy' ? 90 : d === 'medium' ? 120 : 150} giây</div>
                 </button>
               ))}
             </div>
           </div>
           <div className="form-group">
-            <label className="form-label">Nhóm từ (để trống = tất cả)</label>
+            <label className="form-label">2 · Chọn nhóm từ</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 200, overflowY: 'auto' }}>
               {groups.map(g => (
                 <button key={g.Id} className={`group-select-btn ${selectedGroups.includes(g.Id) ? 'active' : ''}`}
@@ -164,15 +166,10 @@ export default function MemoryFlipPage() {
               ))}
             </div>
           </div>
-          <button className="btn btn-primary btn-lg" onClick={startGame}>🃏 Bắt Đầu!</button>
+          <div className="lf-memory-launch"><div><strong>Sẵn sàng ghép {difficulty === 'easy' ? 6 : difficulty === 'medium' ? 10 : 18} cặp?</strong><small>Nhớ vị trí thẻ và ghép thật nhanh.</small></div><button className="btn btn-primary btn-lg" onClick={startGame}>Bắt đầu chơi →</button></div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div className="card">
-            <h4 style={{ marginBottom: 14, fontSize: 14 }}>📖 Cách Chơi</h4>
-            {[['🃏','Lật thẻ xem từ EN hoặc nghĩa VI'],['🔗','Tìm cặp từ EN với nghĩa VI tương ứng'],['✅','Ghép đúng: thẻ sáng lên và ở lại'],['❌','Ghép sai: thẻ lật lại sau 1 giây'],['🔥','Combo 3+: nhân điểm thưởng'],['⏱️','Hết giờ: game kết thúc']].map(([i, t]) => (
-              <div key={t} style={{ display: 'flex', gap: 10, marginBottom: 8, fontSize: 13, color: 'var(--text-secondary)', alignItems: 'flex-start' }}><span>{i}</span><span>{t}</span></div>
-            ))}
-          </div>
+          <div className="card lf-memory-guide"><h4>Cách chơi</h4><div className="lf-memory-example"><span><small>EN</small><b>deadline</b></span><i>↔</i><span><small>VI</small><b>hạn chót</b></span></div>{['Lật hai thẻ để xem nội dung','Ghép từ Anh với nghĩa Việt','Đúng liên tiếp để tăng điểm combo'].map((step,index) => <div className="lf-memory-how" key={step}><i>{index + 1}</i><b>{step}</b></div>)}<div className="lf-memory-note">Thẻ ghép đúng được giữ mở. Ghép sai sẽ úp lại sau một nhịp.</div></div>
         </div>
       </div>
       <style>{`.mf-select{padding-bottom:32px}.diff-btn{flex:1;padding:14px 10px;border-radius:10px;border:2px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-family:inherit;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;align-items:center;gap:4px}.diff-btn:hover{border-color:var(--accent)}.diff-btn.active{border-color:var(--accent);background:rgba(99,102,241,.12)}.group-select-btn{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-family:inherit;font-size:13px;cursor:pointer;transition:all .2s;text-align:left}.group-select-btn:hover{border-color:var(--group-color)}.group-select-btn.active{border-color:var(--group-color);background:color-mix(in srgb,var(--group-color) 10%,transparent)}`}</style>
@@ -180,8 +177,8 @@ export default function MemoryFlipPage() {
   );
 
   if (gameState === 'result') return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', padding: 32 }}>
-      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 20, padding: 40, maxWidth: 460, width: '100%', textAlign: 'center' }}>
+    <div className="lf-memory-result" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', padding: 32 }}>
+      <div className="lf-memory-result-card" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 20, padding: 40, maxWidth: 460, width: '100%', textAlign: 'center' }}>
         <div style={{ fontSize: 64, marginBottom: 12 }}>{matchedPairs >= totalPairs ? '🏆' : '😅'}</div>
         <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>{matchedPairs >= totalPairs ? 'Hoàn thành!' : 'Hết giờ!'}</h2>
         <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 24 }}>Đã ghép {matchedPairs}/{totalPairs} cặp</p>

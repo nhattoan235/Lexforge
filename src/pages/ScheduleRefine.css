@@ -1,0 +1,9 @@
+.lf-schedule .lf-schedule-status,.lf-schedule .lf-schedule-method{display:none!important}
+.lf-schedule-word{display:grid!important;grid-template-columns:minmax(0,1fr) 170px 170px!important;gap:14px!important}
+.lf-schedule-word>div:nth-child(3){display:none!important}
+.lf-schedule-word>div:nth-child(2){justify-self:center;align-items:flex-start!important;width:145px}
+.lf-schedule-word>div:nth-child(4){justify-self:center;text-align:left!important;width:150px!important;font-size:13px!important;font-weight:800}
+.lf-schedule-word>div:nth-child(4)>div:first-child{font-size:15px;color:#0c4962}
+.lf-schedule-word>div:nth-child(4)>div:last-child{font-size:11px;color:#6c8c9a}
+.lf-schedule-list>div:first-child{grid-template-columns:minmax(0,1fr) 170px 170px!important}
+@media(max-width:700px){.lf-schedule-word{grid-template-columns:1fr 1fr!important}.lf-schedule-word>div:first-child{grid-column:1/-1}.lf-schedule-list>div:first-child{display:none!important}}

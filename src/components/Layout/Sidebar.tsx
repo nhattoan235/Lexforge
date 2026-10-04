@@ -1,95 +1,46 @@
-// src/components/Layout/Sidebar.tsx
-import React, { useState } from 'react';
+import React from 'react';
+import { LayoutDashboard, CalendarDays, BookOpen, FolderOpen, Layers, Bot, Headphones, Keyboard, Swords, Skull, Grid2X2, Users, BarChart3, Settings, HelpCircle, Sparkles } from 'lucide-react';
 import { useApp } from '../../App';
 import { Page } from '../../types';
+import { notify } from '../Feedback/ToastHost';
 
-const navItems: { id: Page; label: string; icon: string; section?: string }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '📊', section: 'MAIN' },
-  { id: 'vocabulary', label: 'Từ Vựng', icon: '📖' },
-  { id: 'groups', label: 'Nhóm Từ', icon: '📁' },
-  { id: 'flashcard', label: 'Flashcard', icon: '🃏', section: 'ÔN LUYỆN' },
-  { id: 'quiz', label: 'Trắc Nghiệm', icon: '📝' },
-  { id: 'ai-coach', label: 'AI Coach', icon: '🤖' },
-  { id: 'mp4-listening', label: 'Học MP3', icon: '🎧' },
-  { id: 'typing-game', label: 'Gõ Chữ Tốc Độ', icon: '⌨️' },
-  { id: 'monster-game', label: 'Đánh Quái', icon: '⚔️' },
-  { id: 'zombie-game', label: 'Zombie Survival', icon: '🧟' },
-  { id: 'memory-flip', label: 'Memory Flip', icon: '🃏' },
-  { id: 'progress', label: 'Tiến Độ Học', icon: '📈', section: 'PHÂN TÍCH' },
-  { id: 'schedule', label: 'Lịch Ôn Tập AI', icon: '📅' },
-  { id: 'multiplayer', label: 'Multiplayer', icon: '🌐', section: 'ONLINE' },
-  { id: 'settings', label: 'Cài Đặt', icon: '⚙️', section: 'HỆ THỐNG' },
-  { id: 'help', label: 'Hướng Dẫn', icon: '❓' },
+const sections: { title: string; items: { id: Page; label: string; icon: typeof LayoutDashboard }[] }[] = [
+  { title: 'Hôm nay', items: [{ id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard }, { id: 'schedule', label: 'Lịch ôn tập AI', icon: CalendarDays }] },
+  { title: 'Từ vựng', items: [{ id: 'vocabulary', label: 'Từ vựng', icon: BookOpen }, { id: 'groups', label: 'Nhóm từ', icon: FolderOpen }] },
+  { title: 'Luyện tập', items: [{ id: 'flashcard', label: 'Flashcard', icon: Layers }, { id: 'quiz', label: 'Trắc nghiệm', icon: BookOpen }, { id: 'ai-coach', label: 'AI Coach', icon: Bot }, { id: 'mp4-listening', label: 'Học nghe MP3', icon: Headphones }] },
+  { title: 'Trò chơi', items: [{ id: 'typing-game', label: 'Gõ chữ tốc độ', icon: Keyboard }, { id: 'monster-game', label: 'Đánh quái', icon: Swords }, { id: 'zombie-game', label: 'Zombie Survival', icon: Skull }, { id: 'memory-flip', label: 'Memory Flip', icon: Grid2X2 }, { id: 'multiplayer', label: 'Multiplayer', icon: Users }] },
+  { title: 'Theo dõi', items: [{ id: 'progress', label: 'Tiến độ học', icon: BarChart3 }] },
+  { title: 'Ứng dụng', items: [{ id: 'settings', label: 'Cài đặt', icon: Settings }, { id: 'help', label: 'Hướng dẫn', icon: HelpCircle }] },
 ];
 
 export default function Sidebar() {
-  const { currentPage, setPage } = useApp();
-
+  const { currentPage, setPage, isConnected } = useApp();
+  const openAssistant = async () => {
+    try {
+      const open = (window as any).electronAPI?.openAssistant;
+      if (!open) {
+        notify((window as any).electronAPI ? 'Lexforge vẫn chạy bản cũ. Hãy chọn “Thoát Lexforge” ở khay hệ thống rồi mở lại.' : 'Bong bóng nổi chỉ hoạt động trong ứng dụng Lexforge trên máy tính.', 'error');
+        return;
+      }
+      await open();
+    } catch (_) { notify('Không hiện được bong bóng nổi. Hãy thử mở lại ứng dụng.', 'error'); }
+  };
   return (
-    <aside className="sidebar">
-      <div className="sidebar-logo">
-        <div className="logo-icon">📚</div>
-        <div>
-          <div className="logo-title">TOEIC Master</div>
-          <div className="logo-sub">Vocabulary Builder</div>
-        </div>
+    <aside className="lf-sidebar" aria-label="Điều hướng chính">
+      <div className="lf-brand">
+        <div className="lf-brand-row"><span className="lf-brand-mark"><img src={`${process.env.PUBLIC_URL}/lexforge-mark.png`} alt="" /></span><strong>Lexforge</strong></div>
+        <div className="lf-brand-tagline">✦ Hóa giải rào cản.</div>
       </div>
-
-      <nav className="sidebar-nav">
-        {navItems.map((item) => (
-          <React.Fragment key={item.id}>
-            {item.section && <div className="nav-section">{item.section}</div>}
-            <button
-              className={`nav-item ${currentPage === item.id ? 'active' : ''}`}
-              onClick={() => setPage(item.id)}
-            >
-              <span className="nav-icon">{item.icon}</span>
-              <span className="nav-label">{item.label}</span>
-              {currentPage === item.id && <div className="nav-indicator" />}
-            </button>
-          </React.Fragment>
-        ))}
+      <nav className="lf-sidebar-nav">
+        {sections.map(section => <div className="lf-nav-group" key={section.title}>
+          <div className="lf-nav-title">{section.title}</div>
+          {section.items.map(item => <button type="button" key={item.id} className={`lf-nav-item${currentPage === item.id ? ' active' : ''}`} aria-current={currentPage === item.id ? 'page' : undefined} onClick={() => setPage(item.id)}>
+            <item.icon size={18} strokeWidth={2} /><span>{item.label}</span>
+          </button>)}
+        </div>)}
       </nav>
-
-      <div className="sidebar-footer">
-        <div className="version-badge">v1.0.0</div>
-      </div>
-
-      <style>{`
-        .sidebar {
-          width: 240px; height: 100vh; flex-shrink: 0;
-          background: var(--bg-secondary);
-          border-right: 1px solid var(--border);
-          display: flex; flex-direction: column;
-          overflow: hidden;
-        }
-        .sidebar-logo {
-          display: flex; align-items: center; gap: 12px;
-          padding: 20px 16px; border-bottom: 1px solid var(--border);
-        }
-        .logo-icon { font-size: 28px; }
-        .logo-title { font-size: 15px; font-weight: 700; color: var(--text-primary); }
-        .logo-sub { font-size: 11px; color: var(--text-muted); }
-        .sidebar-nav { flex: 1; padding: 12px 8px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
-        .nav-section { font-size: 10px; font-weight: 600; letter-spacing: 1.5px; color: var(--text-muted); padding: 12px 8px 4px; }
-        .nav-item {
-          display: flex; align-items: center; gap: 10px; position: relative;
-          width: 100%; padding: 10px 12px; border-radius: var(--radius-sm);
-          background: none; border: none; color: var(--text-secondary);
-          font-family: inherit; font-size: 14px; font-weight: 500;
-          cursor: pointer; transition: all 0.2s; text-align: left;
-        }
-        .nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
-        .nav-item.active { background: rgba(99,102,241,0.15); color: var(--accent-bright); }
-        .nav-icon { font-size: 18px; width: 24px; text-align: center; }
-        .nav-label { flex: 1; }
-        .nav-indicator {
-          position: absolute; right: 0; top: 50%; transform: translateY(-50%);
-          width: 3px; height: 60%; background: var(--accent); border-radius: 3px 0 0 3px;
-        }
-        .sidebar-footer { padding: 12px 16px; border-top: 1px solid var(--border); }
-        .version-badge { font-size: 11px; color: var(--text-muted); }
-      `}</style>
+      <button type="button" className="lf-assistant-open" onClick={openAssistant} aria-label="Hiện bong bóng trợ lý tiếng Anh" title="Hiện bong bóng trợ lý tiếng Anh"><span className="lf-assistant-open-icon"><Bot size={20} strokeWidth={2.2}/><Sparkles size={11} strokeWidth={2.5}/></span><span>Hiện bong bóng <small>Trợ lý tiếng Anh</small></span><span className="lf-assistant-open-arrow" aria-hidden="true">↗</span></button>
+      <div className="lf-side-status"><span className={`lf-status-dot${isConnected ? '' : ' offline'}`} /><div><b>{isConnected ? 'Đã sẵn sàng' : 'Đang kết nối'}</b><small>{isConnected ? 'Dữ liệu lưu trên máy' : 'Kiểm tra dữ liệu cục bộ'}</small></div></div>
     </aside>
   );
 }

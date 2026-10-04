@@ -65,14 +65,10 @@
 
   let currentState = { enabled: true, expanded: false, version: '', selectionMonitoring: false };
   let currentTranslation = '';
-  let launcherPointerId = null;
-  let launcherDragStart = null;
-  let launcherWasDragged = false;
-  let suppressLauncherClick = false;
-  let launcherMoveQueued = false;
+  let suppressLauncherClickUntil = 0;
 
-  function applyTheme(theme, persist = false) {
-    const nextTheme = theme === 'light' ? 'light' : 'dark';
+  function applyTheme(theme) {
+    const nextTheme = theme === 'dark' ? 'dark' : 'light';
     document.documentElement.dataset.theme = nextTheme;
     document.querySelector('meta[name="color-scheme"]')?.setAttribute('content', nextTheme);
     const nextLabel = nextTheme === 'dark' ? 'Sáng' : 'Tối';
@@ -81,14 +77,10 @@
     themeSymbol.textContent = nextIcon;
     themeToggle.setAttribute('aria-label', `Chuyển sang giao diện ${nextLabel.toLowerCase()}`);
     themeToggle.title = `Chuyển sang giao diện ${nextLabel.toLowerCase()}`;
-    if (persist) {
-      try { localStorage.setItem('lexforge-assistant-theme', nextTheme); } catch (_) { /* Preference storage is optional. */ }
-    }
   }
 
-  let savedTheme = 'dark';
-  try { savedTheme = localStorage.getItem('lexforge-assistant-theme') || 'dark'; } catch (_) { /* Use dark theme by default. */ }
-  applyTheme(savedTheme);
+  api.onThemeChange(applyTheme);
+  api.getTheme().then(applyTheme).catch(() => applyTheme('light'));
 
   function renderState(nextState) {
     if (!nextState || typeof nextState.enabled !== 'boolean') return;
@@ -262,47 +254,16 @@
 
   launcher.addEventListener('pointerdown', (event) => {
     if (event.button !== 0 || !event.isPrimary || currentState.expanded) return;
-    launcherPointerId = event.pointerId;
-    launcherDragStart = { x: event.screenX, y: event.screenY };
-    launcherWasDragged = false;
-    suppressLauncherClick = false;
-    launcher.setPointerCapture(event.pointerId);
+    launcher.classList.add('is-dragging');
     api.beginWidgetDrag();
   });
-  const moveLauncherFromPointer = (event) => {
-    if (event.pointerId !== launcherPointerId || !launcherDragStart) return;
-    const dx = event.screenX - launcherDragStart.x;
-    const dy = event.screenY - launcherDragStart.y;
-    if (!launcherWasDragged && Math.hypot(dx, dy) < 4) return;
-    launcherWasDragged = true;
-    launcher.classList.add('is-dragging');
-    if (launcherMoveQueued) return;
-    launcherMoveQueued = true;
-    requestAnimationFrame(() => {
-      launcherMoveQueued = false;
-      if (launcherWasDragged) api.moveWidget();
-    });
-  };
-  const endLauncherDrag = (event) => {
-    if (event.pointerId !== launcherPointerId) return;
-    const distance = launcherDragStart
-      ? Math.hypot(event.screenX - launcherDragStart.x, event.screenY - launcherDragStart.y)
-      : 0;
-    const moved = launcherWasDragged || distance >= 4;
-    api.endWidgetDrag(moved);
-    suppressLauncherClick = moved || event.type === 'pointercancel' || event.type === 'lostpointercapture';
+  document.addEventListener('pointerdown', () => api.pointerDown(), true);
+  api.onWidgetDragFinished((moved) => {
+    if (moved) suppressLauncherClickUntil = Date.now() + 350;
     launcher.classList.remove('is-dragging');
-    launcherPointerId = null;
-    launcherDragStart = null;
-    launcherWasDragged = false;
-  };
-  window.addEventListener('pointermove', moveLauncherFromPointer, true);
-  window.addEventListener('pointerup', endLauncherDrag, true);
-  window.addEventListener('pointercancel', endLauncherDrag, true);
-  launcher.addEventListener('lostpointercapture', endLauncherDrag);
+  });
   launcher.addEventListener('click', (event) => {
-    if (suppressLauncherClick) {
-      suppressLauncherClick = false;
+    if (Date.now() < suppressLauncherClickUntil) {
       event.preventDefault();
       return;
     }
@@ -311,7 +272,7 @@
   document.getElementById('collapse').addEventListener('click', () => runAction(() => api.collapsePanel(), 'Không thu gọn được trợ lý.'));
   themeToggle.addEventListener('click', () => {
     const nextTheme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
-    applyTheme(nextTheme, true);
+    api.setTheme(nextTheme).then(applyTheme);
   });
   toggleButton.addEventListener('click', () => runAction(
     () => api.setEnabled(!currentState.enabled),

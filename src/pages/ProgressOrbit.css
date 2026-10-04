@@ -1,0 +1,9 @@
+.lf-progress-orbit .star{left:50%!important;top:50%!important;right:auto!important;bottom:auto!important;transform-origin:0 0;animation-name:lf-star-orbit!important;animation-timing-function:linear!important;animation-iteration-count:infinite!important;opacity:.95}
+.lf-progress-orbit .s1{--radius:133px;--angle:18deg;animation-duration:44s!important}
+.lf-progress-orbit .s2{--radius:143px;--angle:79deg;animation-duration:49s!important}
+.lf-progress-orbit .s3{--radius:128px;--angle:143deg;animation-duration:46s!important}
+.lf-progress-orbit .s4{--radius:151px;--angle:204deg;animation-duration:53s!important}
+.lf-progress-orbit .s5{--radius:139px;--angle:267deg;animation-duration:47s!important}
+.lf-progress-orbit .s6{--radius:147px;--angle:318deg;animation-duration:51s!important}
+@keyframes lf-star-orbit{from{transform:rotate(var(--angle)) translateX(var(--radius)) rotate(calc(-1 * var(--angle)))}to{transform:rotate(calc(var(--angle) - 360deg)) translateX(var(--radius)) rotate(calc(360deg - var(--angle)))}}
+@media(prefers-reduced-motion:reduce){.lf-progress-orbit .star,.lf-progress-ring:before{animation:none!important}}

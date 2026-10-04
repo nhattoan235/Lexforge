@@ -6,6 +6,7 @@ import { useApp } from '../App';
 import TowerDefensePage from './games/TowerDefensePage';
 import WhackMousePage from './games/WhackMousePage';
 import CoopShooterPage from './games/CoopShooterPage';
+import './MultiplayerApproved.css';
 
 type HubState = 'setup' | 'lobby' | 'playing';
 type GameType = 'tower' | 'mouse' | 'shooter';
@@ -15,6 +16,14 @@ const GAME_INFO = {
   mouse:   { name: 'Whack-a-Mouse',   icon: '🐭', minWords: 20, maxPlayers: 12, desc: 'Đập chuột đối thủ bằng cách gõ từ trên đầu họ' },
   shooter: { name: 'Co-op Shooter',   icon: '🔫', minWords: 20, maxPlayers: 5,  desc: 'Cùng nhau bắn quái, thi điểm số cao nhất' },
 };
+
+function GameScene({ type }: { type: GameType }) {
+  return <svg className={`lf-mp-scene ${type}`} viewBox="0 0 160 110" role="img" aria-label={GAME_INFO[type].name}>
+    {type === 'tower' && <><rect width="160" height="110" rx="11" fill="#153f57"/><circle cx="125" cy="26" r="17" fill="#a8dbda" opacity=".7"/><path d="M0 83 35 69 78 79 112 65 160 80v30H0Z" fill="#285f5b"/><path d="M19 88V48h13V35h21v13h15v40Zm78 0V44h12V29h21v15h12v44Z" fill="#d2dfe1" stroke="#426377" strokeWidth="3"/><path d="M16 49h55m23-5h51" stroke="#91b6be" strokeWidth="5"/><path d="M25 34V23h6v11m15 0V23h6v11m53-6V17h6v11m15 0V17h6v11" stroke="#d2dfe1" strokeWidth="6"/><path d="M42 88V68h10v20m63 0V61h10v27" fill="#315469"/><path d="m68 61 21-10-7 11 6 3-20 4" fill="#ffd16d" stroke="#efaa45" strokeWidth="2"/></>}
+    {type === 'mouse' && <><rect width="160" height="110" rx="11" fill="#5b496d"/><path d="M0 83q40-12 80-2 40-10 80 2v27H0Z" fill="#342d51"/><ellipse cx="81" cy="86" rx="51" ry="12" fill="#171c37"/><path d="M51 69c-9-6-15-29-2-37 12-7 23 6 21 18m43 19c9-6 15-29 2-37-12-7-23 6-21 18" fill="#d9a6b6" stroke="#704d73" strokeWidth="3"/><path d="M54 77c0-20 10-38 26-41 16 3 26 21 26 41Z" fill="#e3c1c6" stroke="#704d73" strokeWidth="3"/><circle cx="69" cy="65" r="4" fill="#28324e"/><circle cx="92" cy="65" r="4" fill="#28324e"/><path d="m75 75 6 4 6-4m-25-1-17-4m17 9-18 2m55-7 17-4m-17 9 18 2" fill="none" stroke="#704d73" strokeWidth="2"/><path d="M116 22 137 8l11 14-20 17Z" fill="#ffc96c" stroke="#875d4e" strokeWidth="3"/><path d="m127 38-23 26" stroke="#e5d2ae" strokeWidth="6"/></>}
+    {type === 'shooter' && <><rect width="160" height="110" rx="11" fill="#153a4d"/><path d="M0 88 27 67 57 81 96 63l64 22v25H0Z" fill="#244d55"/><circle cx="127" cy="32" r="22" fill="#ffd270"/><path d="M37 87V64l12-13 12 13v23Zm60 0V60l13-15 14 15v27Z" fill="#4bb9ad" stroke="#a0e9d8" strokeWidth="3"/><path d="m51 65 33-26 8 7-32 27" fill="#f3c964"/><path d="m117 62 22-24" stroke="#ffda78" strokeWidth="4"/><circle cx="139" cy="38" r="6" fill="#fff1bb"/></>}
+  </svg>;
+}
 
 export default function MultiplayerHub() {
   const { setPage } = useApp();
@@ -117,33 +126,35 @@ export default function MultiplayerHub() {
   }
 
   return (
-    <div className="mp-hub">
-      <div className="page-header">
+    <div className="mp-hub lf-training-page lf-multiplayer-page">
+      <div className="page-header lf-training-hero">
         <div>
-          <h1 className="page-title">🌐 Multiplayer</h1>
-          <p className="page-subtitle">Chơi cùng bạn bè qua LAN hoặc Internet</p>
+          <span className="lf-training-eyebrow">CHƠI CÙNG BẠN BÈ</span><h1 className="page-title">Một phòng chơi. <em>Ba cuộc chiến.</em></h1>
+          <p className="page-subtitle">Xây tháp, đập chuột hoặc phối hợp bắn quái. <strong>Chọn trận của bạn.</strong></p>
+          <div className="lf-training-tags"><span>Tạo hoặc vào phòng</span><span>Ba chế độ</span><span>Chơi qua server</span></div>
         </div>
+        <div className="lf-multiplayer-hero-games" aria-hidden="true">{(['tower','mouse','shooter'] as GameType[]).map(type => <div className={`lf-mp-hero-card ${type}`} key={type}><GameScene type={type}/><b>{GAME_INFO[type].name}</b></div>)}</div>
         {connected && <div className="connected-badge">🟢 Đã kết nối</div>}
       </div>
 
       <div className="hub-content">
         {/* SETUP */}
         {hubState === 'setup' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, maxWidth: 860 }}>
+          <div className="lf-multiplayer-setup-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, maxWidth: 860 }}>
             {/* Connect */}
             <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <h3>🔌 Kết Nối Server</h3>
+              <h3>Kết nối để chơi</h3><p className="lf-multiplayer-intro">Nhập tên hiển thị và địa chỉ server của người tạo phòng.</p><div className={`lf-multiplayer-status ${connected ? 'connected' : ''}`}><i>{connected ? '✓' : '◷'}</i><span>{connected ? 'Đã kết nối server' : 'Chưa kết nối server'}</span></div>
               <div className="form-group">
                 <label className="form-label">Tên người chơi</label>
                 <input className="input" value={playerName} onChange={e => setPlayerName(e.target.value)} placeholder="Nhập tên của bạn..." maxLength={20} />
               </div>
               <div className="form-group">
-                <label className="form-label">Server URL</label>
+                <label className="form-label">Địa chỉ server</label>
                 <input className="input font-mono" value={serverUrl} onChange={e => setServerUrl(e.target.value)} placeholder="http://localhost:3001" />
               </div>
               {error && <div className="error-box" style={{ whiteSpace: 'pre-line' }}>⚠️ {error}</div>}
               <button className="btn btn-primary" onClick={handleConnect} disabled={connecting || !playerName.trim()}>
-                {connecting ? '⏳ Đang kết nối...' : '🔌 Kết Nối'}
+                {connecting ? 'Đang kết nối...' : 'Kết nối →'}
               </button>
 
               {connected && (
@@ -165,10 +176,10 @@ export default function MultiplayerHub() {
                           {(Object.entries(GAME_INFO) as [GameType, typeof GAME_INFO.tower][]).map(([t, info]) => (
                             <button key={t} onClick={() => setGameType(t)}
                               className={`game-select-btn ${gameType === t ? 'active' : ''}`}>
-                              <span style={{ fontSize: 24 }}>{info.icon}</span>
+                              <GameScene type={t}/>
                               <div style={{ flex: 1, textAlign: 'left' }}>
-                                <div style={{ fontWeight: 600, fontSize: 13 }}>{info.name}</div>
-                                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Cần {info.minWords} từ · Tối đa {info.maxPlayers} người</div>
+                                <div style={{ fontWeight: 700 }}>{info.name}</div>
+                                <div>Cần {info.minWords} từ · Tối đa {info.maxPlayers} người</div>
                               </div>
                               {wordCount < info.minWords && <span style={{ fontSize: 11, color: 'var(--red)' }}>⚠️ Thiếu từ</span>}
                             </button>
@@ -202,62 +213,21 @@ export default function MultiplayerHub() {
               )}
             </div>
 
-            {/* Guide */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div className="card">
-                <h4 style={{ marginBottom: 14, fontSize: 14 }}>🚀 Hướng dẫn nhanh</h4>
-                {[
-                  ['1️⃣', 'Người host chạy game-server/server.js'],
-                  ['2️⃣', 'Dùng ngrok để share qua internet (tùy chọn)'],
-                  ['3️⃣', 'Nhập Server URL và tên người chơi'],
-                  ['4️⃣', 'Tạo phòng hoặc nhập mã phòng để vào'],
-                  ['5️⃣', 'Chọn vũ khí trong Store rồi bắt đầu!'],
-                ].map(([n, t]) => (
-                  <div key={n as string} style={{ display: 'flex', gap: 10, marginBottom: 10, fontSize: 13 }}>
-                    <span>{n}</span><span style={{ color: 'var(--text-secondary)' }}>{t}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="card">
-                <h4 style={{ marginBottom: 12, fontSize: 14 }}>📊 Từ Vựng Hiện Có</h4>
-                <div style={{ fontSize: 36, fontWeight: 700, color: wordCount >= 50 ? 'var(--green)' : wordCount >= 20 ? '#f59e0b' : 'var(--red)', textAlign: 'center', marginBottom: 8 }}>{wordCount}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center' }}>từ vựng</div>
-                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {Object.entries(GAME_INFO).map(([t, info]) => (
-                    <div key={t} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '4px 8px', borderRadius: 6, background: wordCount >= info.minWords ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)' }}>
-                      <span>{info.icon} {info.name}</span>
-                      <span style={{ color: wordCount >= info.minWords ? 'var(--green)' : 'var(--red)' }}>
-                        {wordCount >= info.minWords ? '✅ Đủ' : `❌ Cần ${info.minWords}`}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="card" style={{ background: 'rgba(99,102,241,0.05)' }}>
-                <h4 style={{ marginBottom: 10, fontSize: 14 }}>📡 Chơi qua Internet (ngrok)</h4>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-                  1. Tải ngrok: <code style={{ color: 'var(--accent-bright)' }}>ngrok.com</code><br/>
-                  2. Chạy: <code style={{ color: 'var(--accent-bright)' }}>ngrok http 3001</code><br/>
-                  3. Copy URL dạng <code style={{ color: 'var(--accent-bright)' }}>https://xxx.ngrok.io</code><br/>
-                  4. Chia sẻ URL cho bạn bè
-                </div>
-              </div>
-            </div>
+            {/* Approved games overview */}
+            <aside className="lf-multiplayer-games-panel"><h2>Trò chơi có trong phòng</h2><p>Số từ cần dùng được kiểm tra trước khi bắt đầu.</p><div className="lf-multiplayer-vocab"><span>Thư viện từ của bạn</span><b>{wordCount} từ</b></div><div className="lf-multiplayer-games">{(Object.entries(GAME_INFO) as [GameType, typeof GAME_INFO.tower][]).map(([type, info]) => <div key={type}><GameScene type={type}/><span><b>{info.name}</b><small>{type === 'tower' ? 'Xây tháp, giữ thành' : type === 'mouse' ? 'Gõ từ để đập chuột' : 'Phối hợp bắn quái'}</small></span><em className={wordCount >= info.minWords ? 'ready' : ''}>{wordCount >= info.minWords ? 'Đủ từ' : `Cần ${info.minWords} từ`}</em></div>)}</div><div className="lf-multiplayer-guide-strip">Chơi thật cần game server hoạt động và mọi người cùng dùng được địa chỉ server đó.</div></aside>
           </div>
         )}
 
         {/* LOBBY */}
         {hubState === 'lobby' && room && (
-          <div style={{ maxWidth: 700 }}>
+          <div className="lf-mp-lobby">
             <div className="card" style={{ marginBottom: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div className="lf-mp-lobby-heading">
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span style={{ fontSize: 32 }}>{GAME_INFO[room.gameType as GameType]?.icon}</span>
+                    <GameScene type={room.gameType as GameType}/>
                     <div>
-                      <div style={{ fontSize: 18, fontWeight: 700 }}>{GAME_INFO[room.gameType as GameType]?.name}</div>
+                      <div style={{ fontSize: 24, fontWeight: 800 }}>{GAME_INFO[room.gameType as GameType]?.name}</div>
                       <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Mã phòng: <span style={{ fontFamily: 'monospace', fontSize: 20, fontWeight: 700, color: 'var(--accent-bright)', letterSpacing: 4 }}>{room.id}</span></div>
                     </div>
                   </div>
@@ -266,11 +236,11 @@ export default function MultiplayerHub() {
               </div>
 
               {/* Players */}
-              <div style={{ marginBottom: 20 }}>
+              <div className="lf-mp-lobby-players" style={{ marginBottom: 20 }}>
                 <div className="form-label" style={{ marginBottom: 10 }}>👥 Người chơi ({room.players.length}/{room.settings.maxPlayers})</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {room.players.map((p: any) => (
-                    <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 8, border: `1px solid ${p.ready ? 'var(--green)' : 'var(--border)'}` }}>
+                    <div key={p.id} className={`lf-mp-player ${p.ready ? 'ready' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 8 }}>
                       <span style={{ fontSize: 20 }}>🐭</span>
                       <span style={{ flex: 1, fontWeight: 600 }}>{p.name}</span>
                       {p.id === room.hostId && <span style={{ fontSize: 11, background: 'rgba(245,158,11,0.2)', color: '#f59e0b', padding: '2px 8px', borderRadius: 10 }}>👑 Host</span>}

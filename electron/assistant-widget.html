@@ -11,7 +11,7 @@
     <main id="assistant-shell" aria-label="Trợ lý tiếng Anh">
       <div class="launcher-stage" id="launcher-stage">
         <button class="launcher" id="launcher" type="button" aria-label="Mở trợ lý tiếng Anh" title="Kéo để di chuyển · bấm để mở">
-          <img class="launcher-symbol" src="../public/lexforge-mark.svg" alt="" draggable="false" />
+          <img class="launcher-symbol" src="../public/lexforge-mark.png" alt="" draggable="false" />
           <span class="launcher-state" id="launcher-state" aria-hidden="true"></span>
         </button>
       </div>
@@ -20,11 +20,11 @@
         <header class="panel-header">
           <div class="brand-lockup">
             <span class="brand-mark" aria-hidden="true">
-              <img src="../public/lexforge-mark.svg" alt="" draggable="false" />
+              <img src="../public/lexforge-mark.png" alt="" draggable="false" />
             </span>
             <span>
               <strong>Trợ lý tiếng Anh</strong>
-              <small>Lexforge</small>
+              <small>Lexforge · luôn sẵn sàng</small>
             </span>
           </div>
           <div class="header-controls">
@@ -53,18 +53,18 @@
           <section class="writing-composer" id="writing-composer" aria-label="Dịch và hỗ trợ viết">
             <div class="composer-heading">
               <div>
-                <span class="eyebrow">CÔNG CỤ AI</span>
-                <h2>Dịch &amp; hỗ trợ viết</h2>
-                <p>Chọn việc cần làm, nhập nội dung và nhận gợi ý ngay.</p>
+                <span class="eyebrow">GÓC VIẾT CỦA BẠN <span aria-hidden="true">✦</span></span>
+                <h2>Viết tự nhiên hơn.</h2>
+                <p>Dịch, sửa câu và tìm cách diễn đạt phù hợp trong một chỗ.</p>
               </div>
             </div>
 
             <div class="field-label" id="task-choice-label">Bạn cần làm gì?</div>
             <div class="task-choices" role="group" aria-labelledby="task-choice-label">
-              <button class="task-choice" type="button" data-task="translate" aria-pressed="true">Dịch</button>
-              <button class="task-choice" type="button" data-task="grammar" aria-pressed="false">Sửa ngữ pháp</button>
-              <button class="task-choice" type="button" data-task="complete" aria-pressed="false">Hoàn chỉnh câu</button>
-              <button class="task-choice" type="button" data-task="write" aria-pressed="false">Viết từ tiếng Việt</button>
+              <button class="task-choice" type="button" data-task="translate" aria-pressed="true"><span aria-hidden="true">↔</span>Dịch</button>
+              <button class="task-choice" type="button" data-task="grammar" aria-pressed="false"><span aria-hidden="true">✓</span>Sửa ngữ pháp</button>
+              <button class="task-choice" type="button" data-task="complete" aria-pressed="false"><span aria-hidden="true">✦</span>Hoàn chỉnh câu</button>
+              <button class="task-choice" type="button" data-task="write" aria-pressed="false"><span aria-hidden="true">✎</span>Viết từ tiếng Việt</button>
             </div>
             <select id="writing-task" hidden aria-hidden="true" tabindex="-1">
               <option value="translate">Dịch từ hoặc câu</option>
@@ -126,6 +126,9 @@
             <div class="translation-copied" id="translation-copied" role="status" hidden>Đã sao chép vào clipboard.</div>
           </section>
 
+        </div>
+
+        <div class="panel-bottom">
           <div class="panel-actions">
             <button class="action-button primary-action" id="open-main" type="button">
               <span class="action-icon" aria-hidden="true">▦</span>
