@@ -9,6 +9,7 @@ let mainWindowRevealed = false;
 let startupWindow;
 let startupShownAt = 0;
 let startupShownPromise = Promise.resolve();
+let startupPagePromise = Promise.resolve();
 let assistantWindow;
 let selectionPreviewWindow;
 let writingWindow;
@@ -66,6 +67,10 @@ const QUICK_SELECTION_DELAY_MS = 500;
 const WRITING_PAUSE_MS = 0;
 const WRITING_WINDOW_WIDTH = 420;
 const STARTUP_MIN_DURATION_MS = 4000;
+const startupProcessAt = Date.now();
+function logStartup(stage) {
+  console.info(`[startup +${Date.now() - startupProcessAt}ms] ${stage}`);
+}
 let assistantStartupScheduled = false;
 
 function scheduleAssistantStartup() {
@@ -85,17 +90,21 @@ function transitionToMainWindow() {
   if (!mainWindow || mainWindow.isDestroyed() || mainWindowRevealed) return;
   mainWindowRevealed = true;
   const splash = startupWindow && !startupWindow.isDestroyed() ? startupWindow : null;
-  // Size the hidden renderer without a visible Windows maximize animation.
-  mainWindow.setBounds(screen.getPrimaryDisplay().workArea, false);
   mainWindow.show();
-  if (splash && !splash.isDestroyed()) splash.close();
-  mainWindow.focus();
+  // Keep the painted splash over the new native window until Windows has
+  // composed its first visible frame.
+  setTimeout(() => {
+    if (splash && !splash.isDestroyed()) splash.close();
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.focus();
+  }, 120);
+  logStartup('main window visible');
 }
 
 function createWindow() {
   mainWindowRevealed = false;
   mainWindow = new BrowserWindow({
-    width: 1280, height: 800, minWidth: 1024, minHeight: 680,
+    ...screen.getPrimaryDisplay().workArea,
+    minWidth: 1024, minHeight: 680,
     icon: path.join(__dirname, '../public/icon.ico'),
     autoHideMenuBar: true,
     webPreferences: {
@@ -103,23 +112,34 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       webSecurity: false,
     },
-    show: false, backgroundColor: '#0f0f1a',
+    show: false, backgroundColor: assistantTheme === 'dark' ? '#0f0f1a' : '#f6fafb',
   });
   let loaded = false;
+  let painted = false;
   let uiReady = false;
   let revealed = false;
   const revealWhenReady = () => {
-    if (!loaded || !uiReady || revealed) return;
+    if (!loaded || !painted || !uiReady || revealed) return;
     revealed = true;
     startupShownPromise.then(() => {
       const delay = Math.max(0, STARTUP_MIN_DURATION_MS - (Date.now() - startupShownAt));
       setTimeout(() => transitionToMainWindow(), delay);
     });
   };
-  mainWindow.webContents.once('did-finish-load', () => { loaded = true; revealWhenReady(); });
+  mainWindow.webContents.once('did-finish-load', () => {
+    loaded = true;
+    logStartup('main page loaded');
+    revealWhenReady();
+  });
+  mainWindow.once('ready-to-show', () => {
+    painted = true;
+    logStartup('main first frame painted');
+    revealWhenReady();
+  });
   const onUiReady = (event) => {
     if (event.sender !== mainWindow?.webContents) return;
     uiReady = true;
+    logStartup('dashboard ready');
     clearTimeout(readinessFallback);
     revealWhenReady();
     ipcMain.removeListener('lexforge-ui-ready', onUiReady);
@@ -164,7 +184,7 @@ function createStartupWindow() {
     width: 480, height: 320,
     icon: path.join(__dirname, '../public/icon.ico'),
     frame: false, resizable: false, maximizable: false,
-    skipTaskbar: true, show: false, alwaysOnTop: true,
+    skipTaskbar: true, show: false, alwaysOnTop: true, opacity: 0,
     paintWhenInitiallyHidden: true,
     backgroundColor: '#0b3045',
     webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
@@ -172,20 +192,35 @@ function createStartupWindow() {
   const splash = startupWindow;
   let splashLoaded = false;
   let splashPainted = false;
-  const showPaintedSplash = () => {
-    if (!splashLoaded || !splashPainted || splash.isDestroyed() || splash.isVisible()) return;
+  let splashRevealScheduled = false;
+  const showSplash = () => {
+    if (!splashLoaded || !splashPainted || splash.isDestroyed() || splashRevealScheduled) return;
+    splashRevealScheduled = true;
+    // Warm the native Windows surface while it is invisible. Some systems show
+    // one black compositor frame when a newly created BrowserWindow is shown.
     splash.show();
-    startupShownAt = Date.now();
-    resolveShown();
+    setTimeout(() => {
+      if (splash.isDestroyed()) return;
+      splash.setOpacity(1);
+      startupShownAt = Date.now();
+      logStartup('splash first frame shown');
+      resolveShown();
+    }, 250);
   };
-  splash.once('ready-to-show', () => { splashPainted = true; showPaintedSplash(); });
-  splash.loadFile(path.join(__dirname, 'startup.html')).then(() => {
+  splash.once('ready-to-show', () => {
+    splashPainted = true;
+    logStartup('splash first frame painted');
+    showSplash();
+  });
+  startupPagePromise = splash.loadFile(path.join(__dirname, 'startup.html')).then(() => {
+    logStartup('splash page loaded');
     splashLoaded = true;
-    showPaintedSplash();
+    showSplash();
   }).catch((error) => {
     console.error('Startup screen failed to load:', error);
     if (!splash.isDestroyed()) {
       splash.show();
+      splash.setOpacity(1);
       startupShownAt = Date.now();
       resolveShown();
     }
@@ -219,13 +254,18 @@ if (!hasSingleInstanceLock) {
   app.on('second-instance', () => showMainWindow());
 
   app.whenReady().then(async () => {
+    logStartup('electron ready');
     for (const eventName of ['display-added', 'display-removed', 'display-metrics-changed']) {
       screen.on(eventName, keepAssistantWindowInWorkArea);
     }
     loadAssistantPreferences();
     createStartupWindow();
     await startupShownPromise;
+    await startupPagePromise;
+    // Give the splash renderer a frame before database initialization competes for CPU.
+    await new Promise(resolve => setTimeout(resolve, 100));
     try { await initDatabase(); } catch (error) { console.error('Database startup failed:', error); }
+    logStartup('database initialized');
     createAssistantTray();
     createWindow();
     scheduleAssistantStartup();
