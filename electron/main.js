@@ -53,6 +53,7 @@ let writingMonitorReady = false;
 let writingMonitorMessage = 'Đang khởi tạo hỗ trợ viết nhanh…';
 let assistantWidgetPosition = null;
 let assistantDragState = null;
+let assistantSnapTimer = null;
 let lastWidgetDragMovedAt = 0;
 let lastAssistantPointerDownAt = 0;
 let assistantCollapsedOrigin = null;
@@ -434,6 +435,7 @@ function isWidgetReachable(bounds) {
 
 function keepAssistantWindowInWorkArea() {
   if (!assistantWindow || assistantWindow.isDestroyed()) return;
+  cancelAssistantSnapAnimation();
   const bounds = assistantExpanded
     ? clampBoundsToWorkArea(assistantWindow.getBounds())
     : snapWidgetBounds(assistantWindow.getBounds());
@@ -448,6 +450,7 @@ function keepAssistantWindowInWorkArea() {
 
 function resizeAssistantWindow(expanded) {
   if (!assistantWindow || assistantWindow.isDestroyed()) return;
+  cancelAssistantSnapAnimation();
 
   const current = assistantWindow.getBounds();
   const size = expanded ? PANEL_SIZE : { width: WIDGET_SIZE, height: WIDGET_SIZE };
@@ -620,6 +623,7 @@ function showAssistantPanel() {
 
 function showAssistantBubble() {
   if (!assistantWindow || assistantWindow.isDestroyed()) createAssistantWindow();
+  cancelAssistantSnapAnimation();
   if (assistantExpanded) resizeAssistantWindow(false);
   // Return the bubble to its default position when explicitly requested.
   const workArea = screen.getPrimaryDisplay().workArea;
@@ -1590,16 +1594,42 @@ ipcMain.handle('assistant:set-theme', (event, theme) => {
   return setAssistantTheme(theme);
 });
 
+function cancelAssistantSnapAnimation() {
+  if (assistantSnapTimer) clearTimeout(assistantSnapTimer);
+  assistantSnapTimer = null;
+}
+
+function animateAssistantSnap(target) {
+  cancelAssistantSnapAnimation();
+  if (!assistantWindow || assistantWindow.isDestroyed()) return;
+  const start = assistantWindow.getBounds();
+  if (start.x === target.x && start.y === target.y) return;
+  const startedAt = Date.now();
+  const duration = 180;
+  const step = () => {
+    assistantSnapTimer = null;
+    if (!assistantWindow || assistantWindow.isDestroyed() || assistantExpanded || assistantDragState) return;
+    const progress = Math.min(1, (Date.now() - startedAt) / duration);
+    const eased = 1 - (1 - progress) ** 3;
+    const x = Math.round(start.x + (target.x - start.x) * eased);
+    const y = Math.round(start.y + (target.y - start.y) * eased);
+    assistantWindow.setPosition(x, y);
+    if (progress < 1) assistantSnapTimer = setTimeout(step, 16);
+  };
+  step();
+}
+
 function moveAssistantDrag(point) {
   if (!assistantDragState || !assistantWindow || assistantWindow.isDestroyed() || assistantExpanded) return;
   const cursor = Number.isFinite(point?.x) && Number.isFinite(point?.y)
-    ? point : screen.getCursorScreenPoint();
+    ? screen.screenToDipPoint({ x: point.x, y: point.y })
+    : screen.getCursorScreenPoint();
   const state = assistantDragState;
   if (!state.moved && Math.hypot(cursor.x - state.startX, cursor.y - state.startY) < 4) return;
   state.moved = true;
   state.pointerX = cursor.x;
   lastWidgetDragMovedAt = Date.now();
-  const displays = screen.getAllDisplays();
+  const displays = state.displays;
   const displayUnderCursor = displays.find(({ bounds: displayBounds }) =>
     cursor.x >= displayBounds.x && cursor.x < displayBounds.x + displayBounds.width &&
     cursor.y >= displayBounds.y && cursor.y < displayBounds.y + displayBounds.height
@@ -1608,12 +1638,12 @@ function moveAssistantDrag(point) {
   const dragDisplay = displays.find(({ id }) => id === state.displayId) ||
     screen.getDisplayNearestPoint(cursor);
   state.displayId = dragDisplay.id;
-  const next = snapWidgetBoundsToDisplay({
+  const next = clampBoundsToArea({
     width: state.width,
     height: state.height,
     x: Math.round(cursor.x - state.offsetX),
     y: Math.round(cursor.y - state.offsetY),
-  }, dragDisplay, cursor.x);
+  }, dragDisplay.workArea);
   state.targetBounds = next;
   if (state.lastX !== next.x || state.lastY !== next.y) {
     assistantWindow.setPosition(next.x, next.y);
@@ -1637,7 +1667,7 @@ function finishAssistantDrag(moved = false) {
   const bounds = snapWidgetBoundsToDisplay(
     currentBounds, dragDisplay,
     state?.pointerX ?? currentBounds.x + currentBounds.width / 2);
-  assistantWindow.setPosition(bounds.x, bounds.y);
+  animateAssistantSnap(bounds);
   const { x, y } = bounds;
   assistantWidgetPosition = { x, y };
   saveAssistantPreferences();
@@ -1648,6 +1678,7 @@ function finishAssistantDrag(moved = false) {
 ipcMain.on('assistant:drag-start', (event) => {
   assertAssistantSender(event);
   if (!assistantWindow || assistantWindow.isDestroyed() || assistantExpanded) return;
+  cancelAssistantSnapAnimation();
   const cursor = screen.getCursorScreenPoint();
   const bounds = assistantWindow.getBounds();
   assistantDragState = {
@@ -1660,6 +1691,7 @@ ipcMain.on('assistant:drag-start', (event) => {
     lastX: bounds.x,
     lastY: bounds.y,
     moved: false,
+    displays: screen.getAllDisplays(),
     displayId: screen.getDisplayNearestPoint(cursor).id,
   };
   startOutsideClickWatcher();

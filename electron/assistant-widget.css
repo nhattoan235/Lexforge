@@ -117,6 +117,12 @@ button, select, textarea { font: inherit; }
   height: 60px;
   pointer-events: none;
   user-select: none;
+  transition: transform 140ms ease, filter 140ms ease;
+}
+
+.launcher.is-dragging .launcher-symbol {
+  transform: scale(1.06);
+  filter: drop-shadow(0 5px 8px rgba(7, 53, 76, .24));
 }
 
 .launcher-state {
