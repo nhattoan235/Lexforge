@@ -53,11 +53,21 @@ internal static class Program
         var missingCount = 0;
         var clearSent = true;
         var gestureWasActive = IsSelectionGestureActive();
+        var ignoredWindowGesture = false;
         var selectionReadScheduler = new InputReadScheduler(70, 700);
 
         while (true)
         {
             var gestureActive = IsSelectionGestureActive();
+            if (gestureActive && !gestureWasActive && GetAsyncKeyState(VirtualKeyLeftMouseButton) < 0)
+                ignoredWindowGesture = IsPointerOverIgnoredWindow();
+            if (!gestureActive) ignoredWindowGesture = false;
+            if (ignoredWindowGesture)
+            {
+                gestureWasActive = gestureActive;
+                Thread.Sleep(SelectionGesturePollIntervalMs);
+                continue;
+            }
             if (gestureActive && !gestureWasActive)
             {
                 lastSignature = null;
@@ -188,11 +198,53 @@ internal static class Program
         GetCursorPos(out var previousCursor);
         var previousForeground = IntPtr.Zero;
         var inputObservedInWindow = false;
+        var suppressShortcutInputUntil = 0L;
         Emit(new MonitorEvent("writingReady"));
 
         while (true)
         {
-            while (commands.TryDequeue(out var line)) ProcessWritingCommand(line, draft);
+            while (commands.TryDequeue(out var line))
+            {
+                if (line == "{\"type\":\"openPopup\"}")
+                {
+                    var foreground = GetForegroundWindow();
+                    GetWindowThreadProcessId(foreground, out var processId);
+                    DraftSnapshot? current = null;
+                    if (processId != ignoredProcessId && processId != (uint)Environment.ProcessId)
+                    {
+                        var zalo = false;
+                        try { zalo = Process.GetProcessById((int)processId).ProcessName
+                            .Equals("Zalo", StringComparison.OrdinalIgnoreCase); }
+                        catch { /* The foreground process may exit during capture. */ }
+                        for (var attempt = 0; attempt < (zalo ? 8 : 2) && current is null; attempt++)
+                        {
+                            try { current = ReadDraft(foreground) ?? ReadEmptyDraft(foreground); }
+                            catch { /* An unsupported editor can still use the manual popup. */ }
+                            if (current is null) Thread.Sleep(zalo ? 90 : 50);
+                        }
+                    }
+                    draft = current is null ? null : current with { Revision = ++revision };
+                    if (draft is not null)
+                    {
+                        sourceKey = draft.SourceKey;
+                        lastText = draft.Text;
+                        Emit(new WritingEvent("manualDraft", draft.Revision, draft.Text, draft.Bounds));
+                    }
+                    else
+                    {
+                        sourceKey = null;
+                        lastText = null;
+                        GetCursorPos(out var point);
+                        Emit(new WritingEvent("manualDraft", ++revision, "",
+                            new Bounds(point.X, point.Y, 1, 1), false));
+                    }
+                    // The shortcut itself is keyboard input, not a new edit to the draft.
+                    previousInputTick = CurrentInputTick();
+                    suppressShortcutInputUntil = Environment.TickCount64 + 350;
+                    continue;
+                }
+                ProcessWritingCommand(line, draft);
+            }
 
             try
             {
@@ -216,7 +268,8 @@ internal static class Program
                     continue;
                 }
 
-                if (inputChanged && !cursorMoved && !IsMouseButtonDown())
+                if (inputChanged && Environment.TickCount64 >= suppressShortcutInputUntil &&
+                    !cursorMoved && !IsMouseButtonDown())
                 {
                     inputObservedInWindow = true;
                     if (sourceKey is not null)
@@ -233,7 +286,8 @@ internal static class Program
                     continue;
                 }
 
-                var current = ReadDraft(foreground);
+                var current = ReadDraft(foreground) ??
+                    (draft?.Empty == true ? ReadEmptyDraft(foreground) : null);
                 if (current is null)
                 {
                     if (sourceKey is not null) Emit(new MonitorEvent("draftClear"));
@@ -274,9 +328,43 @@ internal static class Program
     private static DraftSnapshot? ReadDraft(IntPtr foreground)
     {
         if (foreground == IntPtr.Zero) return null;
+        if (ZaloTextAdapter.TryRead(foreground, out var zalo) &&
+            zalo.SelectionStart == zalo.SelectionEnd)
+        {
+            var span = SentenceSegmenter.FindActiveSentence(zalo.Value, zalo.SelectionStart);
+            if (span is not null && span.Value.Length <= MaxDraftLength)
+            {
+                var text = zalo.Value.Substring(span.Value.Start, span.Value.Length);
+                if (!text.Contains('\n') && !text.Contains('\r'))
+                {
+                    var key = $"{foreground}:zalo:{zalo.Renderer}:{zalo.X:0}:{zalo.Y:0}:{span.Value.Start}";
+                    return new DraftSnapshot(0, key, text,
+                        new Bounds(zalo.X, zalo.Y, zalo.Width, zalo.Height), foreground,
+                        AutomationElement.FromHandle(foreground), null, null,
+                        Zalo: zalo, ZaloSentenceStart: span.Value.Start);
+                }
+            }
+        }
         var focused = AutomationElement.FocusedElement;
         for (var depth = 0; focused is not null && depth < MaxAncestorDepth; depth++)
         {
+            if (NativeEditAdapter.TryRead(focused, foreground, out var native) &&
+                native.SelectionStart == native.SelectionEnd)
+            {
+                var span = SentenceSegmenter.FindActiveSentence(native.Value, native.SelectionStart);
+                if (span is not null && span.Value.Length <= MaxDraftLength)
+                {
+                    var text = native.Value.Substring(span.Value.Start, span.Value.Length);
+                    if (!text.Contains('\n') && !text.Contains('\r'))
+                    {
+                        var key = $"{foreground}:native:{native.Handle}:{span.Value.Start}";
+                        return new DraftSnapshot(0, key, text,
+                            new Bounds(native.X, native.Y, native.Width, native.Height),
+                            foreground, focused, null, null, native, span.Value.Start);
+                    }
+                }
+            }
+
             var type = focused.Current.ControlType;
             if ((type == ControlType.Edit || type == ControlType.Document ||
                  (type == ControlType.Custom && focused.Current.IsKeyboardFocusable)) &&
@@ -329,6 +417,48 @@ internal static class Program
             focused = TreeWalker.ControlViewWalker.GetParent(focused);
         }
 
+        return null;
+    }
+
+    private static DraftSnapshot? ReadEmptyDraft(IntPtr foreground)
+    {
+        if (foreground == IntPtr.Zero) return null;
+        if (ZaloTextAdapter.TryReadEmpty(foreground, out var zalo))
+            return new DraftSnapshot(0, $"{foreground}:zalo-empty:{zalo.Renderer}", "",
+                new Bounds(zalo.X, zalo.Y, zalo.Width, zalo.Height), foreground,
+                AutomationElement.FromHandle(foreground), null, null,
+                Zalo: zalo, ZaloSentenceStart: 0, Empty: true);
+
+        var focused = AutomationElement.FocusedElement;
+        for (var depth = 0; focused is not null && depth < MaxAncestorDepth; depth++)
+        {
+            if (NativeEditAdapter.TryRead(focused, foreground, out var native) &&
+                native.Value.Length == 0 && native.SelectionStart == 0 && native.SelectionEnd == 0)
+                return new DraftSnapshot(0, $"{foreground}:native-empty:{native.Handle}", "",
+                    new Bounds(native.X, native.Y, native.Width, native.Height), foreground,
+                    focused, null, null, native, 0, Empty: true);
+
+            if (focused.Current.ControlType is { } controlType &&
+                (controlType == ControlType.Edit || controlType == ControlType.Document) &&
+                !focused.Current.IsPassword && focused.Current.IsEnabled &&
+                focused.Current.IsKeyboardFocusable &&
+                focused.TryGetCurrentPattern(TextPattern.Pattern, out var objectPattern) &&
+                objectPattern is TextPattern pattern &&
+                pattern.DocumentRange.GetAttributeValue(TextPattern.IsReadOnlyAttribute) is not true &&
+                pattern.DocumentRange.GetText(2).Length == 0)
+            {
+                var selections = pattern.GetSelection();
+                if (selections.Length == 1 && selections[0].GetText(2).Length == 0)
+                {
+                    var rect = focused.Current.BoundingRectangle;
+                    if (!rect.IsEmpty && rect.Width > 0 && rect.Height > 0)
+                        return new DraftSnapshot(0, $"{foreground}:uia-empty:{focused.Current.NativeWindowHandle}",
+                            "", new Bounds(rect.Left, rect.Top, rect.Width, rect.Height),
+                            foreground, focused, selections[0].Clone(), selections[0].Clone(), Empty: true);
+                }
+            }
+            focused = TreeWalker.ControlViewWalker.GetParent(focused);
+        }
         return null;
     }
 
@@ -394,7 +524,8 @@ internal static class Program
             if (draft is null || revision != draft.Revision ||
                 mode is not ("replace" or "replaceTranslation") ||
                 string.IsNullOrWhiteSpace(replacement) || replacement.Length > 500 ||
-                !IsWindow(draft.Window) || draft.ExactRange.GetText(MaxDraftLength + 1) != draft.Text)
+                !IsWindow(draft.Window) ||
+                (draft.NativeEdit is null && !DraftTextUnchanged(draft)))
             {
                 Emit(new ApplyEvent("applyResult", revision, false, "Văn bản đã thay đổi. Hãy thử lại."));
                 return;
@@ -406,7 +537,7 @@ internal static class Program
                 Emit(new ApplyEvent("applyResult", revision, false, "Không thể chuyển về ô đang viết. Hãy thử lại."));
                 return;
             }
-            if (draft.ExactRange.GetText(MaxDraftLength + 1) != draft.Text)
+            if (!DraftTextUnchanged(draft))
             {
                 Emit(new ApplyEvent("applyResult", revision, false, "Văn bản đã thay đổi. Hãy thử lại."));
                 return;
@@ -417,7 +548,16 @@ internal static class Program
                 var selected = false;
                 for (var attempt = 0; attempt < 3 && !selected; attempt++)
                 {
-                    try { selected = SelectDraftText(draft, currentPattern); }
+                    try
+                    {
+                        selected = draft.Empty ? VerifyEmptyInsertionPoint(draft, currentPattern)
+                            : draft.NativeEdit is { } native
+                            ? NativeEditAdapter.TrySelect(native, draft.NativeSentenceStart!.Value, draft.Text.Length)
+                            : draft.Zalo is { } zalo
+                                ? ZaloTextAdapter.TrySelect(draft.Window, zalo,
+                                    draft.ZaloSentenceStart!.Value, draft.Text.Length)
+                                : SelectDraftText(draft, currentPattern);
+                    }
                     catch (Exception error) when (error is InvalidOperationException or COMException)
                     { /* Retry after the editor settles. */ }
                     if (!selected) Thread.Sleep(70);
@@ -434,8 +574,8 @@ internal static class Program
             {
                 try
                 {
-                    if (draft.ExactRange.GetText(MaxDraftLength + 1) == draft.Text)
-                        draft.CaretRange.Select();
+                    if (draft.NativeEdit is null && draft.ExactRange?.GetText(MaxDraftLength + 1) == draft.Text)
+                        draft.CaretRange?.Select();
                 }
                 catch (Exception error) when (error is InvalidOperationException or COMException)
                 { /* Keep the original content untouched if the editor changed. */ }
@@ -481,6 +621,37 @@ internal static class Program
             return false;
         }
 
+        if (draft.NativeEdit is { } native)
+        {
+            var start = draft.NativeSentenceStart!.Value;
+            var expected = native.Value[..start] + replacement + native.Value[(start + draft.Text.Length)..];
+            for (var attempt = 0; attempt < 14; attempt++)
+            {
+                Thread.Sleep(100);
+                if (NativeEditAdapter.TryRead(draft.Target, draft.Window, out var updated) &&
+                    updated.Handle == native.Handle && updated.Value == expected)
+                    return true;
+            }
+            failure = "Đã gửi câu sửa nhưng chưa xác nhận được nội dung trong ô viết. Hãy kiểm tra ô viết rồi thử lại.";
+            return false;
+        }
+
+        if (draft.Zalo is { } zalo)
+        {
+            var start = draft.ZaloSentenceStart!.Value;
+            var expected = zalo.Value[..start] + replacement +
+                zalo.Value[(start + draft.Text.Length)..];
+            for (var attempt = 0; attempt < 14; attempt++)
+            {
+                Thread.Sleep(100);
+                if (ZaloTextAdapter.TryRead(draft.Window, out var updated) &&
+                    updated.Renderer == zalo.Renderer && updated.Value == expected)
+                    return true;
+            }
+            failure = "Đã gửi câu sửa nhưng chưa xác nhận được nội dung trong ô viết. Hãy kiểm tra ô viết rồi thử lại.";
+            return false;
+        }
+
         for (var attempt = 0; attempt < 6; attempt++)
         {
             Thread.Sleep(100);
@@ -501,6 +672,33 @@ internal static class Program
     private static bool TryPrepareDraftTarget(DraftSnapshot draft, out TextPattern pattern)
     {
         pattern = null!;
+        if (draft.Zalo is { } zalo)
+        {
+            for (var attempt = 0; attempt < 5; attempt++)
+            {
+                if (GetForegroundWindow() != draft.Window && !ActivateWindow(draft.Window))
+                {
+                    // Windows can deny foreground activation after the user spends
+                    // time typing Vietnamese in our popup. A synthetic Alt tap
+                    // grants the monitor a fresh foreground activation attempt.
+                    var alt = new[] { KeyDown(0x12), KeyUp(0x12) };
+                    if (SendInput(2, alt, Marshal.SizeOf<KeyboardInputEvent>()) == 2)
+                    {
+                        Thread.Sleep(50);
+                        ActivateWindow(draft.Window);
+                    }
+                }
+                if (GetForegroundWindow() == draft.Window &&
+                    (draft.Empty ? ZaloTextAdapter.TryFocusEmpty(draft.Window, zalo)
+                        : ZaloTextAdapter.TryFocus(draft.Window, zalo)))
+                    return true;
+                Thread.Sleep(90);
+            }
+            Console.Error.WriteLine(GetForegroundWindow() == draft.Window
+                ? "Writing Zalo focus: composer did not accept focus."
+                : "Writing Zalo focus: foreground activation failed.");
+            return false;
+        }
         for (var attempt = 0; attempt < 3; attempt++)
         {
             try
@@ -508,6 +706,10 @@ internal static class Program
                 if (GetForegroundWindow() != draft.Window) ActivateWindow(draft.Window);
                 draft.Target.SetFocus();
                 Thread.Sleep(70);
+                if (draft.NativeEdit is { } native && GetForegroundWindow() == draft.Window &&
+                    NativeEditAdapter.TryRead(draft.Target, draft.Window, out var current) &&
+                    current.Handle == native.Handle && current.Value == native.Value)
+                    return true;
                 if (GetForegroundWindow() == draft.Window &&
                     draft.Target.TryGetCurrentPattern(TextPattern.Pattern, out var objectPattern) &&
                     objectPattern is TextPattern textPattern)
@@ -525,6 +727,7 @@ internal static class Program
 
     private static bool SelectDraftText(DraftSnapshot draft, TextPattern pattern)
     {
+        if (draft.ExactRange is null || draft.CaretRange is null) return false;
         // Focusing a web editor after the popup closes can move its caret. Ask the
         // provider to select the verified sentence range directly before using keys.
         try
@@ -573,6 +776,20 @@ internal static class Program
         return SelectionMatchesDraft(pattern, draft.Text);
     }
 
+    private static bool VerifyEmptyInsertionPoint(DraftSnapshot draft, TextPattern pattern)
+    {
+        if (draft.Zalo is { } zalo)
+            return ZaloTextAdapter.TryVerifyEmptyFocused(draft.Window, zalo);
+        if (draft.NativeEdit is { } native)
+            return NativeEditAdapter.TrySelect(native, 0, 0) &&
+                NativeEditAdapter.TryRead(draft.Target, draft.Window, out var current) &&
+                current.Handle == native.Handle && current.Value.Length == 0 &&
+                current.SelectionStart == 0 && current.SelectionEnd == 0;
+        if (pattern is null || pattern.DocumentRange.GetText(2).Length != 0) return false;
+        var selections = pattern.GetSelection();
+        return selections.Length == 1 && selections[0].GetText(2).Length == 0;
+    }
+
     private static bool SendRepeatedKey(ushort key, int count, bool shift)
     {
         for (var sent = 0; sent < count; sent += 8)
@@ -600,6 +817,26 @@ internal static class Program
         if (actual == expected) return true;
         Console.Error.WriteLine($"Writing selection mismatch: ranges={selected.Length}, selectedLength={actual.Length}, expectedLength={expected.Length}");
         return false;
+    }
+
+    private static bool DraftTextUnchanged(DraftSnapshot draft)
+    {
+        if (draft.Zalo is { } zalo)
+            return draft.Empty ? ZaloTextAdapter.TryConfirmEmpty(draft.Window, zalo)
+                : ZaloTextAdapter.TryConfirmUnchanged(draft.Window, zalo,
+                draft.ZaloSentenceStart!.Value, draft.Text);
+        if (draft.NativeEdit is { } native)
+        {
+            var start = draft.NativeSentenceStart!.Value;
+            return NativeEditAdapter.TryRead(draft.Target, draft.Window, out var current) &&
+                current.Handle == native.Handle && current.Value == native.Value &&
+                start >= 0 && start + draft.Text.Length <= current.Value.Length &&
+                current.Value.Substring(start, draft.Text.Length) == draft.Text;
+        }
+        if (draft.Empty)
+            return draft.Target.TryGetCurrentPattern(TextPattern.Pattern, out var objectPattern) &&
+                objectPattern is TextPattern pattern && pattern.DocumentRange.GetText(2).Length == 0;
+        return draft.ExactRange?.GetText(MaxDraftLength + 1) == draft.Text;
     }
 
     private static KeyboardInputEvent KeyDown(ushort key) => new()
@@ -673,8 +910,10 @@ internal static class Program
     private static extern bool IsWindow(IntPtr window);
 
     private sealed record DraftSnapshot(int Revision, string SourceKey, string Text, Bounds Bounds,
-        IntPtr Window, AutomationElement Target, TextPatternRange ExactRange, TextPatternRange CaretRange);
-    private sealed record WritingEvent(string Type, int Revision, string Text, Bounds Bounds);
+        IntPtr Window, AutomationElement Target, TextPatternRange? ExactRange, TextPatternRange? CaretRange,
+        NativeEditAdapter.State? NativeEdit = null, int? NativeSentenceStart = null,
+        ZaloTextAdapter.State? Zalo = null, int? ZaloSentenceStart = null, bool Empty = false);
+    private sealed record WritingEvent(string Type, int Revision, string Text, Bounds Bounds, bool CanApply = true);
     private sealed record ApplyEvent(string Type, int Revision, bool Success, string? Error);
     private sealed record FocusEvent(string Type, int Revision, bool Success);
 
@@ -693,6 +932,15 @@ internal static class Program
     {
         try
         {
+            if (ZaloTextAdapter.TryRead(GetForegroundWindow(), out var zalo) &&
+                zalo.SelectionEnd > zalo.SelectionStart)
+            {
+                var selectedText = zalo.Value[zalo.SelectionStart..zalo.SelectionEnd].Trim();
+                if (!string.IsNullOrWhiteSpace(selectedText))
+                    return new Selection(selectedText.Length > MaxTextLength
+                        ? selectedText[..MaxTextLength] : selectedText,
+                        new Bounds(zalo.X, zalo.Y, zalo.Width, zalo.Height));
+            }
             var current = AutomationElement.FocusedElement;
             for (var depth = 0; current is not null && depth < MaxAncestorDepth; depth++)
             {
@@ -725,6 +973,16 @@ internal static class Program
                     }
                 }
 
+                if (NativeEditAdapter.TryRead(current, GetForegroundWindow(), out var native,
+                        allowReadOnly: true) &&
+                    native.SelectionEnd > native.SelectionStart)
+                {
+                    var text = native.Value[native.SelectionStart..native.SelectionEnd];
+                    if (!string.IsNullOrWhiteSpace(text))
+                        return new Selection(text.Length > MaxTextLength ? text[..MaxTextLength] : text,
+                            new Bounds(native.X, native.Y, native.Width, native.Height));
+                }
+
                 current = TreeWalker.ControlViewWalker.GetParent(current);
             }
         }
@@ -753,6 +1011,16 @@ internal static class Program
     private static bool IsSelectionGestureActive() =>
         GetAsyncKeyState(VirtualKeyLeftMouseButton) < 0 ||
         GetAsyncKeyState(VirtualKeyShift) < 0;
+
+    private static bool IsPointerOverIgnoredWindow()
+    {
+        if (ignoredProcessId == 0 || !GetCursorPos(out var point)) return false;
+        var child = WindowFromPoint(point);
+        if (child == IntPtr.Zero) return false;
+        var root = GetAncestor(child, 3); // GA_ROOTOWNER
+        GetWindowThreadProcessId(root == IntPtr.Zero ? child : root, out var processId);
+        return processId == ignoredProcessId;
+    }
 
     private static uint CurrentInputTick()
     {

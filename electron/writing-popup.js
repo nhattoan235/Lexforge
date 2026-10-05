@@ -3,6 +3,7 @@
   const popup = document.getElementById('popup');
   const suggestion = document.getElementById('suggestion');
   const targetSentence = document.getElementById('target-sentence');
+  const targetLabel = document.getElementById('target-label');
   const suggestionLabel = document.getElementById('suggestion-label');
   const shortcutHint = document.getElementById('shortcut-hint');
   const error = document.getElementById('error');
@@ -19,6 +20,7 @@
   let revision = 0;
   let corrected = '';
   let english = '';
+  let manual = false;
   let dragPointer = null;
   let dragOrigin = null;
 
@@ -69,23 +71,42 @@
   }
 
   api.onSuggestion((payload) => {
+    const preserveInput = manual && payload.manual && revision === payload.revision;
     revision = payload.revision;
+    manual = Boolean(payload.manual);
     const failed = typeof payload.failure === 'string' && Boolean(payload.failure);
     corrected = failed ? '' : payload.corrected;
+    const hasTarget = Boolean(payload.original);
+    targetLabel.hidden = !hasTarget;
+    targetSentence.hidden = !hasTarget;
     targetSentence.textContent = payload.original || '';
-    english = '';
+    suggestionLabel.hidden = !hasTarget;
+    suggestion.hidden = !hasTarget;
     suggestionLabel.textContent = failed ? 'Chưa thể tạo gợi ý' : 'Câu đề xuất';
     suggestion.dataset.failed = String(failed);
-    suggestion.textContent = failed ? payload.failure : corrected;
-    acceptButton.hidden = failed;
-    translateToggle.hidden = failed;
-    shortcutHint.hidden = failed;
-    vietnameseInput.value = '';
-    vietnamesePanel.hidden = true;
-    translationResult.hidden = true;
-    translateToggle.setAttribute('aria-expanded', 'false');
-    showError('');
+    suggestion.textContent = failed ? payload.failure : payload.checking ? 'Đang kiểm tra câu…' :
+      corrected || (manual && hasTarget ? 'Câu này chưa cần sửa.' : '');
+    acceptButton.hidden = failed || !corrected || payload.canApply === false;
+    translateToggle.hidden = failed || manual;
+    shortcutHint.hidden = failed && !manual;
+    shortcutHint.textContent = manual
+      ? 'Ctrl+Alt+W mở nhanh · Esc đóng · Ctrl+Alt+4 dịch · Ctrl+Alt+5 thay câu (nếu có câu đích)'
+      : 'Ctrl+Alt+W mở nhanh · Esc đóng và trở về ô viết · Ctrl+Alt+1 áp dụng · 2 bỏ qua · 3 Việt → Anh · 4 dịch · 5 thay câu';
+    insertButton.hidden = false;
+    insertButton.innerHTML = hasTarget
+      ? '✓ Thay câu đang viết <small>Ctrl+Alt+5</small>'
+      : '✓ Chèn vào ô đang viết <small>Ctrl+Alt+5</small>';
+    if (!preserveInput) {
+      english = '';
+      vietnameseInput.value = '';
+      translationResult.hidden = true;
+      vietnamesePanel.hidden = !manual;
+      translateToggle.setAttribute('aria-expanded', String(manual));
+    }
+    error.textContent = '';
+    error.hidden = true;
     reportHeight();
+    if (manual && !preserveInput) setTimeout(() => vietnameseInput.focus(), 80);
   });
 
   const dismiss = () => api.dismiss(revision);
@@ -153,4 +174,5 @@
     insertButton.disabled = false;
     if (!result.success) showError(result.error || 'Không thay được câu đang viết.');
   });
+
 })();

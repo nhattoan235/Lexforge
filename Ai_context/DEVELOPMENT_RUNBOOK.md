@@ -42,6 +42,8 @@ Nếu không thấy nhãn, mở bảng trợ lý để đọc thông báo trạn
 
 ### Thử hỗ trợ viết nhanh
 
+Phím tắt toàn hệ thống **Ctrl+Alt+W** mở popup hỗ trợ viết tại ô đang soạn. Trong popup, nhập ý tiếng Việt rồi bấm **Dịch sang tiếng Anh**. Nếu có câu hiện tại, dùng **Thay câu đang viết**; nếu ô soạn trống và được nhận diện, dùng **Chèn vào ô đang viết**. Ứng dụng xác nhận lại ô đích trước khi ghi và báo lỗi nếu không nhận diện được ô.
+
 1. Trong Notepad hoặc ô soạn thảo ChatGPT, gõ `I went home. She go to school every day.` và để con trỏ ở cuối. Sau khi ngừng gõ, bảng **Gợi ý viết** phải hiển thị **Câu sẽ thay** là `She go to school every day.` và chỉ đề xuất sửa câu đó. Thử đặt con trỏ trong câu đầu rồi chỉnh một ký tự để xác nhận trợ lý chuyển sang câu chứa con trỏ.
 2. Bấm **× Bỏ qua**; bảng đóng. Sửa câu một chút rồi ngừng gõ để xem gợi ý mới. Bấm **✓ Áp dụng** và xác nhận đúng dòng gốc được thay thế trong ứng dụng đang viết.
 3. Khi bảng gợi ý hiện, bấm **Việt → Anh**, nhập một ý tiếng Việt và bấm **Dịch sang tiếng Anh**. Kết quả hiện bên dưới. Bấm **Thay câu đang viết** và kiểm tra dòng gốc được thay hoàn toàn, không nối thêm.

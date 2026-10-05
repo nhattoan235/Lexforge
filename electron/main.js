@@ -1,8 +1,16 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, screen, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, screen, clipboard, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+
+// A GUI launch may outlive the terminal that started it. Diagnostics must not
+// terminate the application when that terminal closes its output pipes.
+for (const stream of [process.stdout, process.stderr]) {
+  stream?.on('error', (error) => {
+    if (error.code !== 'EPIPE') process.exitCode = 1;
+  });
+}
 
 let mainWindow;
 let mainWindowRevealed = false;
@@ -53,6 +61,7 @@ let quickSelectionTimer = null;
 let quickSelectionAbort = null;
 let quickSelectionVersion = 0;
 let quickSelectionBounds = null;
+let quickSelectionManualPosition = null;
 const quickTranslationCache = new Map();
 let assistantEnabled = true;
 let assistantExpanded = false;
@@ -66,10 +75,13 @@ const QUICK_SELECTION_DELAY_MS = 500;
 // The native monitor already waits for a quiet typing interval before sending a draft.
 const WRITING_PAUSE_MS = 0;
 const WRITING_WINDOW_WIDTH = 420;
+const WRITING_OPEN_SHORTCUT = 'Control+Alt+W';
 const STARTUP_MIN_DURATION_MS = 4000;
 const startupProcessAt = Date.now();
 function logStartup(stage) {
-  console.info(`[startup +${Date.now() - startupProcessAt}ms] ${stage}`);
+  if (process.env.LEXFORGE_STARTUP_LOG !== '1') return;
+  fs.appendFile(path.join(app.getPath('userData'), 'startup.log'),
+    `[startup +${Date.now() - startupProcessAt}ms] ${stage}\n`, () => {});
 }
 let assistantStartupScheduled = false;
 
@@ -267,6 +279,8 @@ if (!hasSingleInstanceLock) {
     try { await initDatabase(); } catch (error) { console.error('Database startup failed:', error); }
     logStartup('database initialized');
     createAssistantTray();
+    if (!globalShortcut.register(WRITING_OPEN_SHORTCUT, openWritingPopupWithShortcut))
+      console.warn(`Could not register writing shortcut ${WRITING_OPEN_SHORTCUT}.`);
     createWindow();
     scheduleAssistantStartup();
   });
@@ -281,6 +295,7 @@ if (!hasSingleInstanceLock) {
   });
   app.on('before-quit', () => {
     appIsQuitting = true;
+    globalShortcut.unregister(WRITING_OPEN_SHORTCUT);
     if (assistantTray) {
       assistantTray.destroy();
       assistantTray = null;
@@ -721,7 +736,6 @@ function createSelectionPreviewWindow() {
       preload: path.join(__dirname, 'selection-preview-preload.js'),
     },
   });
-  selectionPreviewWindow.setIgnoreMouseEvents(true, { forward: true });
   selectionPreviewWindow.setAlwaysOnTop(true, 'floating');
   selectionPreviewWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false });
   selectionPreviewWindow.loadFile(path.join(__dirname, 'selection-preview.html'));
@@ -729,6 +743,11 @@ function createSelectionPreviewWindow() {
     if (!appIsQuitting) event.preventDefault();
   });
   const preview = selectionPreviewWindow;
+  preview.on('move', () => {
+    if (selectionPreviewWindow !== preview || !preview.isVisible() || !quickSelectionBounds) return;
+    const { x, y } = preview.getBounds();
+    quickSelectionManualPosition = { version: quickSelectionVersion, x, y };
+  });
   preview.on('closed', () => {
     if (selectionPreviewWindow === preview) selectionPreviewWindow = null;
   });
@@ -742,6 +761,7 @@ function clearQuickSelection() {
   if (quickSelectionAbort) quickSelectionAbort.abort();
   quickSelectionAbort = null;
   quickSelectionBounds = null;
+  quickSelectionManualPosition = null;
   const preview = selectionPreviewWindow;
   selectionPreviewWindow = null;
   if (preview && !preview.isDestroyed()) preview.destroy();
@@ -816,7 +836,11 @@ function positionQuickTranslation(height, version) {
   const preferredY = belowY + previewHeight <= workArea.y + workArea.height ? belowY : aboveY;
   const x = Math.min(Math.max(selection.x, workArea.x), workArea.x + workArea.width - width);
   const y = Math.min(Math.max(preferredY, workArea.y), workArea.y + workArea.height - previewHeight);
-  selectionPreviewWindow.setBounds({ x: Math.round(x), y: Math.round(y), width, height: previewHeight }, false);
+  const desired = quickSelectionManualPosition?.version === version
+    ? { ...quickSelectionManualPosition, width, height: previewHeight }
+    : { x, y, width, height: previewHeight };
+  const next = clampBoundsToWorkArea(desired);
+  selectionPreviewWindow.setBounds({ x: Math.round(next.x), y: Math.round(next.y), width, height: previewHeight }, false);
   selectionPreviewWindow.showInactive();
 }
 
@@ -1026,6 +1050,21 @@ function clearWritingSuggestion() {
   if (writingWindow && !writingWindow.isDestroyed()) writingWindow.hide();
 }
 
+function openWritingPopupWithShortcut() {
+  if (!assistantEnabled) return;
+  if (writingWindow && !writingWindow.isDestroyed() && writingWindow.isVisible() &&
+      writingWindow.isFocused()) {
+    if (writingDraft && !writingDraft.manual) {
+      writingDraft.manual = true;
+      showWritingSuggestion(currentWritingSuggestion || '', writingDraft.revision);
+    }
+    writingWindow.focus();
+    return;
+  }
+  if (!writingMonitorProcess || writingMonitorProcess.killed || !writingMonitorReady) return;
+  writingMonitorProcess.stdin.write(`${JSON.stringify({ type: 'openPopup' })}\n`);
+}
+
 function positionWritingWindow(height, revision) {
   if (!writingDraft || writingDraft.revision !== revision || !writingWindow || writingWindow.isDestroyed()) return;
   const bounds = writingDraft.bounds;
@@ -1058,7 +1097,7 @@ function positionWritingWindow(height, revision) {
   startOutsideClickWatcher();
 }
 
-function showWritingSuggestion(corrected, revision, failure = '') {
+function showWritingSuggestion(corrected, revision, failure = '', checking = false) {
   if (!writingDraft || writingDraft.revision !== revision || !assistantEnabled) return;
   manualWritingPosition = null;
   currentWritingSuggestion = corrected;
@@ -1070,6 +1109,9 @@ function showWritingSuggestion(corrected, revision, failure = '') {
         original: writingDraft.text,
         corrected,
         failure,
+        manual: Boolean(writingDraft.manual),
+        canApply: writingDraft.canApply !== false,
+        checking,
       });
     }
   };
@@ -1172,6 +1214,33 @@ function handleWritingMonitorLine(line) {
   }
   if (event.type === 'popupFocusResult') {
     if (event.success !== true && isDev) console.warn('Writing popup could not take keyboard focus.');
+    return;
+  }
+  if (event.type === 'manualDraft' && typeof event.text === 'string' && event.bounds &&
+      Number.isInteger(event.revision) && assistantEnabled) {
+    clearWritingSuggestion();
+    writingDraft = {
+      revision: event.revision,
+      text: event.text,
+      bounds: event.bounds,
+      manual: true,
+      canApply: event.canApply === true,
+    };
+    const requestVersion = writingRequestVersion;
+    showWritingSuggestion('', event.revision, '', Boolean(event.text));
+    if (event.text && looksLikeEnglishSelection(event.text)) {
+      const controller = new AbortController();
+      writingAbort = controller;
+      requestGrammarSuggestion(event.text, controller).then((corrected) => {
+        if (requestVersion === writingRequestVersion && writingDraft?.revision === event.revision)
+          showWritingSuggestion(corrected, event.revision);
+      }).catch((error) => {
+        if (requestVersion === writingRequestVersion && writingDraft?.revision === event.revision)
+          showWritingSuggestion('', event.revision, getWritingTaskErrorMessage(error));
+      }).finally(() => {
+        if (writingAbort === controller) writingAbort = null;
+      });
+    }
     return;
   }
   if (event.type === 'draftClear') {
@@ -1689,6 +1758,8 @@ ipcMain.handle('assistant:writing-apply', async (event, revision, mode, text) =>
       (mode === 'replace' ? text !== currentWritingSuggestion : text !== currentWritingTranslation)) {
     return { success: false, error: 'Đề xuất đã cũ. Hãy chọn lại ô đang viết.' };
   }
+  if (writingDraft.canApply === false)
+    return { success: false, error: 'Chưa nhận được ô đang viết. Hãy đặt con trỏ vào ô soạn rồi bấm Ctrl+Alt+W.' };
   if (pendingWritingApply) return { success: false, error: 'Đang áp dụng đề xuất trước.' };
   const result = await new Promise((resolve) => {
     const timeout = setTimeout(() => {

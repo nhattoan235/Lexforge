@@ -5,6 +5,7 @@ dist-stage5-runtime10/
 dist-stage5-ux/
 dist-stage5-smoother/
 build/
+build-next/
 .env
 .env.*
 !.env.example
