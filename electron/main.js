@@ -4,6 +4,11 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
+// Chromium's GPU process crashes on some Windows graphics drivers while the
+// frameless assistant windows remain logically visible. Software compositing
+// keeps those windows drawable instead of leaving an invisible native window.
+app.disableHardwareAcceleration();
+
 // A GUI launch may outlive the terminal that started it. Diagnostics must not
 // terminate the application when that terminal closes its output pipes.
 for (const stream of [process.stdout, process.stderr]) {
@@ -62,7 +67,10 @@ let quickSelectionTimer = null;
 let quickSelectionAbort = null;
 let quickSelectionVersion = 0;
 let quickSelectionBounds = null;
+let quickSelectionText = '';
+let quickSelectionAnchor = null;
 let quickSelectionManualPosition = null;
+let quickCloseShortcutRegistered = false;
 const quickTranslationCache = new Map();
 let assistantEnabled = true;
 let assistantExpanded = false;
@@ -73,6 +81,7 @@ const WIDGET_EDGE_GAP = 8;
 const PANEL_SIZE = { width: 440, height: 740 };
 const SELECTION_PREVIEW_WIDTH = 340;
 const QUICK_SELECTION_DELAY_MS = 500;
+const QUICK_TRANSLATION_CLOSE_SHORTCUT = 'Escape';
 // The native monitor already waits for a quiet typing interval before sending a draft.
 const WRITING_PAUSE_MS = 0;
 const WRITING_WINDOW_WIDTH = 420;
@@ -448,6 +457,13 @@ function keepAssistantWindowInWorkArea() {
   }
 }
 
+function keepAssistantAboveApps() {
+  if (!assistantWindow || assistantWindow.isDestroyed()) return;
+  assistantWindow.moveTop();
+  // Apply this after show/moveTop: on Windows those calls can drop WS_EX_TOPMOST.
+  assistantWindow.setAlwaysOnTop(true, 'screen-saver');
+}
+
 function resizeAssistantWindow(expanded) {
   if (!assistantWindow || assistantWindow.isDestroyed()) return;
   cancelAssistantSnapAnimation();
@@ -484,8 +500,8 @@ function resizeAssistantWindow(expanded) {
     assistantExpandedBounds = null;
     assistantWidgetPosition = { x: bounds.x, y: bounds.y };
     saveAssistantPreferences();
-    assistantWindow.setAlwaysOnTop(true, 'floating');
     assistantWindow.showInactive();
+    keepAssistantAboveApps();
   } else {
     assistantExpandedBounds = assistantWindow.getBounds();
     startOutsideClickWatcher();
@@ -496,9 +512,8 @@ function resizeAssistantWindow(expanded) {
 function collapseAssistantPanel() {
   if (!assistantWindow || assistantWindow.isDestroyed()) return;
   resizeAssistantWindow(false);
-  assistantWindow.setAlwaysOnTop(true, 'floating');
   assistantWindow.showInactive();
-  assistantWindow.moveTop();
+  keepAssistantAboveApps();
 }
 
 function handleOutsideClickLine(line) {
@@ -614,9 +629,9 @@ function showAssistantPanel() {
   if (assistantExpanded) {
     assistantWindow.setBounds(clampBoundsToWorkArea(assistantWindow.getBounds()), false);
   }
-  assistantWindow.setAlwaysOnTop(true, 'floating');
   assistantWindow.show();
   assistantWindow.focus();
+  keepAssistantAboveApps();
   if (!assistantExpanded) resizeAssistantWindow(true);
   sendAssistantState();
 }
@@ -632,9 +647,8 @@ function showAssistantBubble() {
   assistantWindow.setPosition(x, y);
   assistantWidgetPosition = { x, y };
   saveAssistantPreferences();
-  assistantWindow.setAlwaysOnTop(true, 'floating');
   assistantWindow.showInactive();
-  assistantWindow.moveTop();
+  keepAssistantAboveApps();
   sendAssistantState();
 }
 
@@ -670,8 +684,8 @@ function createAssistantWindow() {
   assistantWindow.loadFile(path.join(__dirname, 'assistant-widget.html'));
   const revealAssistant = () => {
     if (!assistantWindow || assistantWindow.isDestroyed() || assistantWindow.isVisible()) return;
-    assistantWindow.setAlwaysOnTop(true, 'floating');
     assistantWindow.showInactive();
+    keepAssistantAboveApps();
     startOutsideClickWatcher();
     sendAssistantState();
   };
@@ -679,7 +693,7 @@ function createAssistantWindow() {
   assistantWindow.webContents.once('did-finish-load', revealAssistant);
   assistantWindow.on('focus', () => {
     if (!assistantWindow || assistantWindow.isDestroyed()) return;
-    assistantWindow.setAlwaysOnTop(true, 'floating');
+    keepAssistantAboveApps();
   });
   assistantWindow.on('close', (event) => {
     if (appIsQuitting) return;
@@ -724,15 +738,19 @@ function createSelectionPreviewWindow() {
     height: 70,
     title: 'Bản dịch nhanh',
     frame: false,
-    transparent: true,
-    backgroundColor: '#00000000',
+    // Keep the surface opaque so this non-focusable utility window remains
+    // drawable with Windows software compositing.
+    transparent: false,
+    backgroundColor: assistantTheme === 'dark' ? '#111827' : '#ffffff',
     resizable: false,
     movable: true,
+    // Mouse controls still work, while clicking the preview no longer activates
+    // the Electron app group and brings the main Lexforge window to the front.
     focusable: false,
     alwaysOnTop: true,
     skipTaskbar: true,
     show: false,
-    hasShadow: false,
+    hasShadow: true,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -747,6 +765,15 @@ function createSelectionPreviewWindow() {
     if (!appIsQuitting) event.preventDefault();
   });
   const preview = selectionPreviewWindow;
+  preview.webContents.on('render-process-gone', (_event, details) => {
+    console.warn('Quick preview renderer stopped:', details.reason, details.exitCode);
+  });
+  preview.webContents.on('preload-error', (_event, _path, error) => {
+    console.warn('Quick preview preload failed:', error.message);
+  });
+  preview.webContents.on('did-fail-load', (_event, code, description) => {
+    console.warn('Quick preview load failed:', code, description);
+  });
   preview.on('move', () => {
     if (selectionPreviewWindow !== preview || !preview.isVisible() || !quickSelectionBounds) return;
     const { x, y } = preview.getBounds();
@@ -759,30 +786,53 @@ function createSelectionPreviewWindow() {
 }
 
 function clearQuickSelection() {
+  if (quickCloseShortcutRegistered) {
+    globalShortcut.unregister(QUICK_TRANSLATION_CLOSE_SHORTCUT);
+    quickCloseShortcutRegistered = false;
+  }
   quickSelectionVersion++;
   if (quickSelectionTimer) clearTimeout(quickSelectionTimer);
   quickSelectionTimer = null;
   if (quickSelectionAbort) quickSelectionAbort.abort();
   quickSelectionAbort = null;
   quickSelectionBounds = null;
+  quickSelectionText = '';
+  quickSelectionAnchor = null;
   quickSelectionManualPosition = null;
   const preview = selectionPreviewWindow;
   selectionPreviewWindow = null;
   if (preview && !preview.isDestroyed()) preview.destroy();
 }
 
+function registerQuickTranslationCloseShortcut() {
+  if (quickCloseShortcutRegistered) return;
+  quickCloseShortcutRegistered = globalShortcut.register(QUICK_TRANSLATION_CLOSE_SHORTCUT, () => {
+    if (selectionPreviewWindow && !selectionPreviewWindow.isDestroyed() && selectionPreviewWindow.isVisible())
+      clearQuickSelection();
+  });
+}
+
 function looksLikeEnglishSelection(text) {
   const words = text.match(/[A-Za-z]+(?:['’-][A-Za-z]+)*/g) || [];
+  const letters = text.match(/\p{L}/gu) || [];
+  const englishLetters = text.match(/[A-Za-z]/g) || [];
+  const englishRatio = letters.length ? englishLetters.length / letters.length : 0;
   return text.length <= 400 && words.length > 0 && words.length <= 80 &&
-    /[A-Za-z]{2}/.test(text) && !/[À-ỹ]/u.test(text) &&
+    /[A-Za-z]{2}/.test(text) && englishRatio >= 0.9 &&
     !/https?:\/\/|www\.|@/.test(text);
 }
 
 function scheduleQuickTranslation(selection) {
-  clearQuickSelection();
   if (!assistantEnabled || !looksLikeEnglishSelection(selection.text)) return;
+  // UI Automation can report the same painted selection repeatedly after the
+  // preview takes focus. Recreating the BrowserWindow for every duplicate made
+  // it flash for a few milliseconds and appear as if it never opened.
+  if (quickSelectionText === selection.text && quickSelectionBounds) return;
+  clearQuickSelection();
   const version = quickSelectionVersion;
   quickSelectionBounds = selection.bounds;
+  quickSelectionText = selection.text;
+  quickSelectionAnchor = screen.getCursorScreenPoint();
   quickSelectionTimer = setTimeout(async () => {
     quickSelectionTimer = null;
     if (version !== quickSelectionVersion || !assistantEnabled) return;
@@ -791,11 +841,16 @@ function scheduleQuickTranslation(selection) {
       showQuickTranslation(cached, version);
       return;
     }
+    showQuickTranslation('Đang dịch…', version, false, true);
     const controller = new AbortController();
     quickSelectionAbort = controller;
     try {
       const translation = await requestQuickTranslation(selection.text, controller.signal);
-      if (version !== quickSelectionVersion || !translation) return;
+      if (version !== quickSelectionVersion) return;
+      if (!translation) {
+        showQuickTranslation('Không nhận được bản dịch tiếng Anh phù hợp. Bạn vẫn có thể nghe câu đã chọn.', version, true);
+        return;
+      }
       quickTranslationCache.set(selection.text, translation);
       if (quickTranslationCache.size > 30) quickTranslationCache.delete(quickTranslationCache.keys().next().value);
       showQuickTranslation(translation, version);
@@ -810,12 +865,12 @@ function scheduleQuickTranslation(selection) {
   }, QUICK_SELECTION_DELAY_MS);
 }
 
-function showQuickTranslation(translation, version, failed = false) {
+function showQuickTranslation(translation, version, failed = false, pending = false) {
   if (version !== quickSelectionVersion || !quickSelectionBounds) return;
   const preview = createSelectionPreviewWindow();
   const send = () => {
     if (version !== quickSelectionVersion || preview.isDestroyed()) return;
-    preview.webContents.send('assistant:quick-translation', { translation, version, failed });
+    preview.webContents.send('assistant:quick-translation', { original: quickSelectionText, translation, version, failed, pending });
   };
   if (preview.webContents.isLoading()) preview.webContents.once('did-finish-load', send);
   else send();
@@ -823,29 +878,29 @@ function showQuickTranslation(translation, version, failed = false) {
 
 function positionQuickTranslation(height, version) {
   if (version !== quickSelectionVersion || !quickSelectionBounds || !selectionPreviewWindow || selectionPreviewWindow.isDestroyed()) return;
-  const bounds = quickSelectionBounds;
-  const topLeft = screen.screenToDipPoint({ x: bounds.x, y: bounds.y });
-  const bottomRight = screen.screenToDipPoint({ x: bounds.x + bounds.width, y: bounds.y + bounds.height });
-  const selection = {
-    x: Math.min(topLeft.x, bottomRight.x),
-    y: Math.min(topLeft.y, bottomRight.y),
-    width: Math.abs(bottomRight.x - topLeft.x),
-    height: Math.abs(bottomRight.y - topLeft.y),
-  };
-  const workArea = screen.getDisplayNearestPoint({ x: selection.x, y: selection.y }).workArea;
+  const anchor = quickSelectionAnchor || screen.getCursorScreenPoint();
+  const workArea = screen.getDisplayNearestPoint(anchor).workArea;
   const width = Math.min(SELECTION_PREVIEW_WIDTH, workArea.width);
   const previewHeight = Math.min(Math.max(Math.round(height), 58), Math.min(230, workArea.height));
-  const belowY = selection.y + selection.height + 8;
-  const aboveY = selection.y - previewHeight - 10;
+  const belowY = anchor.y + 18;
+  const aboveY = anchor.y - previewHeight - 18;
   const preferredY = belowY + previewHeight <= workArea.y + workArea.height ? belowY : aboveY;
-  const x = Math.min(Math.max(selection.x, workArea.x), workArea.x + workArea.width - width);
+  const x = Math.min(Math.max(anchor.x + 12, workArea.x), workArea.x + workArea.width - width);
   const y = Math.min(Math.max(preferredY, workArea.y), workArea.y + workArea.height - previewHeight);
   const desired = quickSelectionManualPosition?.version === version
     ? { ...quickSelectionManualPosition, width, height: previewHeight }
     : { x, y, width, height: previewHeight };
   const next = clampBoundsToWorkArea(desired);
   selectionPreviewWindow.setBounds({ x: Math.round(next.x), y: Math.round(next.y), width, height: previewHeight }, false);
+  // Keep keyboard focus in the application where the user selected text.
+  // Software compositing above prevents the invisible-surface failure that
+  // previously affected showInactive() on this Windows graphics driver.
   selectionPreviewWindow.showInactive();
+  selectionPreviewWindow.moveTop();
+  // moveTop() can drop WS_EX_TOPMOST on Windows; apply the persistent level last.
+  selectionPreviewWindow.setAlwaysOnTop(true, 'screen-saver');
+  registerQuickTranslationCloseShortcut();
+  if (isDev) console.info('Quick preview shown:', selectionPreviewWindow.isVisible(), selectionPreviewWindow.getBounds());
 }
 
 function handleSelectionMonitorLine(line) {
@@ -857,10 +912,12 @@ function handleSelectionMonitorLine(line) {
   }
 
   if (event.type === 'selection' && typeof event.text === 'string' && event.text.trim() && event.bounds) {
+    if (isDev) console.info('Quick selection:', event.text.trim().length, 'characters; eligible:', looksLikeEnglishSelection(event.text.trim()));
     scheduleQuickTranslation({ text: event.text.trim(), bounds: event.bounds });
   } else if (event.type === 'clear') {
     clearQuickSelection();
   } else if (event.type === 'ready') {
+    if (isDev) console.info('Quick selection monitor ready.');
     selectionMonitorReady = true;
     selectionMonitorMessage = 'Đã kết nối nhận diện vùng chọn.';
     sendAssistantState();
@@ -967,7 +1024,7 @@ async function requestQuickTranslation(text, signal) {
   if (signal.aborted) requestController.abort();
   const timeout = setTimeout(() => requestController.abort(), 15_000);
   try {
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const request = (model) => fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       signal: requestController.signal,
       headers: {
@@ -975,7 +1032,7 @@ async function requestQuickTranslation(text, signal) {
         Authorization: `Bearer ${apiKey.trim()}`,
       },
       body: JSON.stringify({
-        model: 'openai/gpt-oss-120b',
+        model,
         messages: [
           {
             role: 'system',
@@ -985,13 +1042,19 @@ async function requestQuickTranslation(text, signal) {
         ],
         reasoning_effort: 'low',
         temperature: 0.1,
-        max_completion_tokens: 300,
+        max_completion_tokens: 900,
       }),
     });
+    let response = await request('openai/gpt-oss-120b');
+    if ([502, 503, 504].includes(response.status)) {
+      if (isDev) console.warn(`Quick translation model unavailable (${response.status}); retrying with 20b.`);
+      response = await request('openai/gpt-oss-20b');
+    }
     if (!response.ok) throw new Error(`GROQ_HTTP_${response.status}`);
     const data = await response.json();
     const translation = data.choices?.[0]?.message?.content?.trim();
-    if (!translation || /^SKIP[.!]?$/i.test(translation)) return '';
+    if (!translation) throw new Error('EMPTY_RESPONSE');
+    if (/^SKIP[.!]?$/i.test(translation)) return '';
     return translation.slice(0, 900);
   } finally {
     clearTimeout(timeout);
@@ -1055,7 +1118,7 @@ function clearWritingSuggestion() {
 }
 
 function openWritingPopupWithShortcut() {
-  if (!assistantEnabled) return;
+  if (!assistantEnabled || pendingWritingApply) return;
   if (writingWindow && !writingWindow.isDestroyed() && writingWindow.isVisible() &&
       writingWindow.isFocused()) {
     if (writingDraft && !writingDraft.manual) {
@@ -1070,6 +1133,7 @@ function openWritingPopupWithShortcut() {
 }
 
 function positionWritingWindow(height, revision) {
+  if (pendingWritingApply) return;
   if (!writingDraft || writingDraft.revision !== revision || !writingWindow || writingWindow.isDestroyed()) return;
   const bounds = writingDraft.bounds;
   const point = screen.screenToDipPoint({ x: bounds.x, y: bounds.y });
@@ -1195,6 +1259,7 @@ async function requestVietnameseWriting(text) {
 function handleWritingMonitorLine(line) {
   let event;
   try { event = JSON.parse(line); } catch (_) { return; }
+  if (pendingWritingApply && ['draft', 'manualDraft', 'draftInput', 'draftClear'].includes(event.type)) return;
   if (event.type === 'writingReady') {
     writingMonitorReady = true;
     writingMonitorMessage = 'Hỗ trợ viết nhanh đã sẵn sàng.';
@@ -1615,6 +1680,7 @@ function animateAssistantSnap(target) {
     const y = Math.round(start.y + (target.y - start.y) * eased);
     assistantWindow.setPosition(x, y);
     if (progress < 1) assistantSnapTimer = setTimeout(step, 16);
+    else keepAssistantAboveApps();
   };
   step();
 }
@@ -1671,8 +1737,8 @@ function finishAssistantDrag(moved = false) {
   const { x, y } = bounds;
   assistantWidgetPosition = { x, y };
   saveAssistantPreferences();
-  assistantWindow.setAlwaysOnTop(true, 'floating');
   assistantWindow.showInactive();
+  keepAssistantAboveApps();
 }
 
 ipcMain.on('assistant:drag-start', (event) => {
@@ -1712,7 +1778,12 @@ ipcMain.on('assistant:drag-end', (event, moved) => {
 ipcMain.on('assistant:quick-preview-height', (event, height, version) => {
   if (!selectionPreviewWindow || event.sender.id !== selectionPreviewWindow.webContents.id) return;
   if (!Number.isFinite(height) || !Number.isInteger(version)) return;
+  if (isDev) console.info('Quick preview ready:', version, 'height:', height);
   positionQuickTranslation(height, version);
+});
+ipcMain.on('assistant:quick-preview-close', (event) => {
+  if (!selectionPreviewWindow || event.sender.id !== selectionPreviewWindow.webContents.id) return;
+  clearQuickSelection();
 });
 
 function assertWritingSender(event) {
@@ -1802,11 +1873,24 @@ ipcMain.handle('assistant:writing-apply', async (event, revision, mode, text) =>
       revision,
       resolve: (value) => { clearTimeout(timeout); resolve(value); },
     };
-    writingMonitorProcess.stdin.write(`${JSON.stringify({ type: 'apply', revision, mode, text })}\n`);
+    // Release popup focus before the native helper activates the destination.
+    // Height updates must not show/focus this window again during the operation.
+    if (writingWindow && !writingWindow.isDestroyed()) writingWindow.hide();
+    try {
+      writingMonitorProcess.stdin.write(`${JSON.stringify({ type: 'apply', revision, mode, text })}\n`);
+    } catch (_) {
+      const pending = pendingWritingApply;
+      pendingWritingApply = null;
+      pending.resolve({ success: false, error: 'Bộ hỗ trợ viết đã ngắt kết nối. Hãy thử lại.' });
+    }
   });
   if (result.success) {
     dismissedWritingRevision = revision;
     clearWritingSuggestion();
+  } else if (assistantEnabled && writingDraft?.revision === revision &&
+      writingWindow && !writingWindow.isDestroyed()) {
+    writingWindow.show();
+    writingWindow.focus();
   }
   return result;
 });
@@ -1943,6 +2027,13 @@ function createTables() {
       TotalReviews INTEGER DEFAULT 0,
       CorrectReviews INTEGER DEFAULT 0,
       CreatedAt TEXT DEFAULT (datetime('now')),
+      UpdatedAt TEXT DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS WordSchedule (
+      WordId INTEGER PRIMARY KEY REFERENCES Words(Id) ON DELETE CASCADE,
+      ScheduleDays INTEGER NOT NULL DEFAULT 1,
+      ScheduleUrgency TEXT NOT NULL DEFAULT 'low',
+      PForget REAL NOT NULL DEFAULT 0.5,
       UpdatedAt TEXT DEFAULT (datetime('now'))
     );
     CREATE TABLE IF NOT EXISTS StudySessionsLSTM (

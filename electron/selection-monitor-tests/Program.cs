@@ -55,3 +55,18 @@ foreach (var (time, tick) in new[] { (0L, 1u), (200L, 2u), (400L, 3u), (600L, 4u
 if (typingPause.ShouldRead(1299, window, 4) || !typingPause.ShouldRead(1300, window, 4))
     throw new Exception("The draft should be read only after 700 ms without input.");
 Console.WriteLine("Typing pause check passed.");
+
+foreach (var empty in new[] { "", "\r\n", "\u200B", "\uFEFF", "\u200B\r\n\u2029" })
+    if (!EditorEmptyText.IsEmpty(empty))
+        throw new Exception("An empty editor marker must permit insertion without selecting it as a sentence.");
+foreach (var content in new[] { "hello", " ", ".", "\uFFFC", "\u200Bhello", "\r\nhello", new string('\n', 4) + "text" })
+    if (EditorEmptyText.IsEmpty(content))
+        throw new Exception("Existing content must never be classified as an empty editor.");
+if (!EditorEmptyText.IsEmpty("\uFFFC", true) ||
+    EditorEmptyText.IsEmpty("\uFFFC", false) || EditorEmptyText.IsEmpty("\u200B", false) ||
+    EditorEmptyText.IsEmpty("hello", true))
+    throw new Exception("Embedded objects require an independently confirmed empty value; visible text is never empty.");
+if (EditorEmptyText.TrimBoundaryMarkers("\u200BHello.\r\n") != "Hello." ||
+    EditorEmptyText.TrimBoundaryMarkers("Hello\u200Bworld") != "Hello\u200Bworld")
+    throw new Exception("Verification may trim editor boundary markers but must preserve internal content.");
+Console.WriteLine("Empty editor recognition and content preservation checks passed.");

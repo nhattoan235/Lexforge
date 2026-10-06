@@ -23,6 +23,11 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--popup-fo
 .theme-toggle { min-width: 55px; padding: 0 7px; font-size: 11px; font-weight: 750; }
 .close-button { width: 28px; padding: 0; font-size: 20px; line-height: 1; }
 .label { margin-top: 8px; color: var(--popup-muted); font-size: 12px; font-weight: 750; }
+.label-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.label-line .label { margin-top: 0; }
+.speech-button { min-height: 27px; padding: 0 8px; border: 1px solid var(--popup-border); border-radius: 8px; background: var(--popup-quiet); color: var(--popup-text); font-size: 11px; font-weight: 750; }
+.speech-button:hover { background: var(--popup-quiet-hover); }
+.speech-button[data-speaking="true"] { border-color: var(--popup-accent); color: var(--popup-accent); }
 .target-sentence { margin: 6px 0 0; padding: 9px 11px; border: 1px solid var(--popup-border); border-radius: 9px; background: var(--popup-input); color: var(--popup-text); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
 .suggestion { margin: 6px 0 0; padding: 11px 12px; border: 1px solid var(--popup-success-border); border-radius: 10px; background: var(--popup-success); color: var(--popup-text); font-size: 15px; font-weight: 700; line-height: 1.45; overflow-wrap: anywhere; }
 .suggestion[data-failed="true"] { border-color: var(--popup-danger-border); background: var(--popup-danger-bg); color: var(--popup-danger); }
@@ -39,7 +44,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--popup-fo
 .vietnamese-panel textarea::placeholder { color: var(--popup-subtle); }
 .translate-button { display: block; margin-top: 9px; }
 .translation-result { margin-top: 11px; padding: 10px; border: 1px solid var(--popup-success-border); border-radius: 10px; background: var(--popup-success); }
-.translation-result .label { margin-top: 0; }
+.translation-result .label-line { margin-top: 0; }
 .translation-result p { margin: 6px 0 9px; font-size: 14px; font-weight: 700; line-height: 1.45; overflow-wrap: anywhere; }
 .translate-button small, .insert-button small { margin-left: 4px; opacity: .82; font-size: 10px; }
 .error { margin: 9px 0 0; color: var(--popup-danger); font-size: 12px; line-height: 1.4; }

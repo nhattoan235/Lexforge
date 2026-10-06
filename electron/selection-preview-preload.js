@@ -11,4 +11,5 @@ contextBridge.exposeInMainWorld('selectionPreviewAPI', {
     ipcRenderer.on('assistant:quick-translation', (_event, payload) => callback(payload));
   },
   reportHeight: (height, version) => ipcRenderer.send('assistant:quick-preview-height', height, version),
+  close: () => ipcRenderer.send('assistant:quick-preview-close'),
 });

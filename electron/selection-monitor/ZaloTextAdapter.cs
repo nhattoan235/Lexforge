@@ -22,19 +22,23 @@ internal static class ZaloTextAdapter
     internal static bool TryReadEmpty(IntPtr foreground, out State state)
     {
         state = null!;
+        var emptyTextConfirmed = false;
         if (TryRead(foreground, out var existing))
         {
             if (existing.Value.Length != 0 || existing.SelectionStart != 0 || existing.SelectionEnd != 0)
                 return false;
-            state = existing;
-            return true;
+            emptyTextConfirmed = true;
         }
         if (!IsZaloWindow(foreground) || !TryGetRoot(foreground, out var root, out var renderer) ||
             !TryFocusedComposer(root, out var group) ||
             !TryBounds(group, out var x, out var y, out var width, out var height)) return false;
+        if (emptyTextConfirmed && (existing.Renderer != renderer || !MatchesBounds(group, existing))) return false;
         var nameAvailable = TryGetName(group, out var name);
         var signatureAvailable = TryGetStaticTextSignature(group, out var signature);
-        if (!signatureAvailable || !(IsEmptyComposerName(name) || IsEmptyComposerSignature(signature)))
+        // Even when IA2 exposes an empty text node, capture the composer's signature.
+        // Returning the bare text state left EmptySignature null and made the later
+        // focus verification reject the same empty composer.
+        if (!signatureAvailable || !(emptyTextConfirmed || IsEmptyComposerName(name) || IsEmptyComposerSignature(signature)))
             return false;
         state = new State(renderer, "", 0, 0, x, y, width, height,
             nameAvailable && IsEmptyComposerName(name) ? name : null, signature);

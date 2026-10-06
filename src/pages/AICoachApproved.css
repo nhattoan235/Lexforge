@@ -19,4 +19,32 @@
 .lf-ai-composer .lf-ai-message-input{font-size:17px!important;color:#123e53!important;background:#f8fcfd!important;border-color:#a8cad6!important;min-height:76px}
 .lf-ai-composer>div:nth-child(2){font-size:14px!important;color:#5c7b89!important}
 .lf-ai-chat .lf-ai-helper-panel button{font-size:14px!important}
+.lf-ai-session-controls{display:flex;align-items:center;justify-content:flex-end;gap:9px;flex-wrap:wrap}
+.lf-ai-chat .lf-ai-chat-head .lf-ai-session-controls .lf-ai-word-count{display:inline-flex;align-items:center;min-height:34px;padding:0 11px;border:1px solid #c5dce3;border-radius:8px;background:#e9f5f7;color:#245a6e!important;font-size:13px!important;font-weight:750}
+.lf-ai-chat .lf-ai-chat-head .lf-ai-session-controls .lf-ai-auto-speak{display:inline-flex;align-items:center;gap:7px;min-height:34px;padding:0 11px;border:1px solid #c5dce3;border-radius:8px;background:#fff;color:#245a6e!important;font-size:13px!important;font-weight:700;cursor:pointer}
+.lf-ai-auto-speak input{width:16px;height:16px;margin:0;accent-color:#0b8f91}
+.lf-ai-chat .lf-ai-chat-head .lf-ai-session-controls .lf-ai-control-button{min-height:34px;padding:0 13px;border:1px solid #9dbfca;border-radius:8px;background:#fff;color:#0a6178!important;font:inherit;font-size:13px!important;font-weight:800;cursor:pointer}
+.lf-ai-chat .lf-ai-chat-head .lf-ai-session-controls .lf-ai-control-button:hover{background:#e9f5f7;border-color:#0b8195}
+.lf-ai-chat .lf-ai-chat-head .lf-ai-session-controls .lf-ai-control-button-primary{border-color:#0b7187;background:#0b7187;color:#fff!important}
+.lf-ai-chat .lf-ai-chat-head .lf-ai-session-controls .lf-ai-control-button-primary:hover{border-color:#095b70;background:#095b70}
+.lf-ai-helper-actions{display:flex;gap:7px;flex-shrink:0;flex-wrap:wrap}
+.lf-ai-chat .lf-ai-helper-panel .lf-ai-helper-actions button{min-height:34px;padding:6px 11px;border-radius:8px;font:inherit;font-size:13px!important;font-weight:800;white-space:nowrap;cursor:pointer;transition:background .15s,border-color .15s}
+.lf-ai-chat .lf-ai-helper-panel .lf-ai-helper-copy{border:1px solid #8db9c5;background:#fff;color:#0b6178}
+.lf-ai-chat .lf-ai-helper-panel .lf-ai-helper-copy:hover{background:#e8f5f7;border-color:#0b8195}
+.lf-ai-chat .lf-ai-helper-panel .lf-ai-helper-insert{border:1px solid #0b7187;background:#0b7187;color:#fff}
+.lf-ai-chat .lf-ai-helper-panel .lf-ai-helper-insert:hover{background:#095b70;border-color:#095b70}
+.lf-ai-grammar-banner{display:flex;flex-direction:column;gap:6px;margin-top:10px;padding:13px 15px;border:1px solid #e3aaa0;border-radius:11px;background:#fff3ef;color:#173e50;font-size:14px;line-height:1.45}
+.lf-ai-grammar-title{color:#9a3412;font-weight:800}
+.lf-ai-grammar-correction{color:#254b5d}
+.lf-ai-grammar-correction strong{color:#086b55;font-weight:800}
+.lf-ai-grammar-explanation{color:#496674;font-size:13px;font-style:italic}
+.lf-ai-grammar-apply{align-self:flex-start;margin-top:5px;padding:7px 12px;border:0;border-radius:8px;background:#0b7187;color:#fff;font:inherit;font-size:13px;font-weight:800;cursor:pointer}
+.lf-ai-grammar-apply:hover{background:#095b70}
+body[data-lexforge-theme=dark] .lf-ai-grammar-banner{border-color:#ae6861;background:#273942;color:#f2fafb}
+body[data-lexforge-theme=dark] .lf-ai-grammar-title{color:#ffb4a4}
+body[data-lexforge-theme=dark] .lf-ai-grammar-correction{color:#e5f3f5}
+body[data-lexforge-theme=dark] .lf-ai-grammar-correction strong{color:#82e5c5}
+body[data-lexforge-theme=dark] .lf-ai-grammar-explanation{color:#c2d6db}
+body[data-lexforge-theme=dark] .lf-ai-grammar-apply{background:#38b9b2;color:#082c37}
+body[data-lexforge-theme=dark] .lf-ai-grammar-apply:hover{background:#5bd3c9}
 

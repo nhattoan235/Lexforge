@@ -224,7 +224,7 @@ export const db = {
   getGroupSchedule: (groupId: number) =>
     dbService.query(
       `SELECT w.Id, w.English, w.Vietnamese, 
-        COALESCE((SELECT RecallRate FROM WordMetrics WHERE WordId=w.Id), 0.5) as PRecall,
+        COALESCE((SELECT AVG(CAST(Correct AS REAL)) FROM StudySessionsLSTM WHERE WordId=w.Id), 0.5) as PRecall,
         COALESCE((SELECT ScheduleDays FROM WordSchedule WHERE WordId=w.Id), 1) as ScheduleDays,
         COALESCE((SELECT ScheduleUrgency FROM WordSchedule WHERE WordId=w.Id), 'low') as Urgency,
         COALESCE((SELECT MAX(Timestamp) FROM StudySessionsLSTM WHERE WordId=w.Id), w.CreatedAt) as LastReview

@@ -17,7 +17,10 @@ internal static class Program
     private const int VirtualKeyLeftMouseButton = 0x01;
     private const int VirtualKeyRightMouseButton = 0x02;
     private const int VirtualKeyShift = 0x10;
-    private const int MissingSelectionThreshold = 2;
+    // Chromium and several desktop editors intermittently stop exposing an
+    // otherwise unchanged selection for a few UIA polls. Keep the last valid
+    // selection long enough for Electron's 500 ms translation debounce.
+    private const int MissingSelectionThreshold = 10;
     private const int WritingPollIntervalMs = 100;
     private const int MaxDraftLength = 350;
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -218,12 +221,32 @@ internal static class Program
                         catch { /* The foreground process may exit during capture. */ }
                         for (var attempt = 0; attempt < (zalo ? 8 : 2) && current is null; attempt++)
                         {
-                            try { current = ReadDraft(foreground) ?? ReadEmptyDraft(foreground); }
+                            try { current = ReadEmptyDraft(foreground) ?? ReadDraft(foreground); }
                             catch { /* An unsupported editor can still use the manual popup. */ }
                             if (current is null) Thread.Sleep(zalo ? 90 : 50);
                         }
                     }
                     draft = current is null ? null : current with { Revision = ++revision };
+                    Console.Error.WriteLine($"Writing manual capture: target={GetWindowProcessName(foreground)}, available={draft is not null}, empty={draft?.Empty}, length={draft?.Text.Length}");
+                    if (GetWindowProcessName(foreground) == "chrome")
+                    {
+                        try
+                        {
+                            var element = AutomationElement.FocusedElement;
+                            for (var depth = 0; element is not null && depth < 4; depth++)
+                            {
+                                var hasText = element.TryGetCurrentPattern(TextPattern.Pattern, out var textObject);
+                                var hasValue = element.TryGetCurrentPattern(ValuePattern.Pattern, out var valueObject);
+                                var textLength = textObject is TextPattern tp ? tp.DocumentRange.GetText(MaxTextLength + 1).Length : -1;
+                                var valueLength = valueObject is ValuePattern vp ? vp.Current.Value.Length : -1;
+                                Console.Error.WriteLine($"Writing Chrome focus: depth={depth}, type={element.Current.ControlType.ProgrammaticName}, focusable={element.Current.IsKeyboardFocusable}, text={hasText}:{textLength}, value={hasValue}:{valueLength}");
+                                element = TreeWalker.ControlViewWalker.GetParent(element);
+                            }
+                        }
+                        catch { /* Diagnostics must never prevent manual capture. */ }
+                    }
+                    if (draft?.Text is "\uFFFC" or "\u200B" or "\uFEFF")
+                        Console.Error.WriteLine($"Writing editor marker: U+{(int)draft.Text[0]:X4}");
                     if (draft is not null)
                     {
                         sourceKey = draft.SourceKey;
@@ -286,8 +309,8 @@ internal static class Program
                     continue;
                 }
 
-                var current = ReadDraft(foreground) ??
-                    (draft?.Empty == true ? ReadEmptyDraft(foreground) : null);
+                var current = (draft?.Empty == true ? ReadEmptyDraft(foreground) : null) ??
+                    ReadDraft(foreground);
                 if (current is null)
                 {
                     if (sourceKey is not null) Emit(new MonitorEvent("draftClear"));
@@ -430,6 +453,18 @@ internal static class Program
                 Zalo: zalo, ZaloSentenceStart: 0, Empty: true);
 
         var focused = AutomationElement.FocusedElement;
+        // Chrome may expose placeholder text (or U+FFFC) through TextPattern even
+        // when the focused input's ValuePattern is empty. Capture that actual input
+        // before walking ancestors, which can otherwise select the surrounding page.
+        if (GetWindowProcessName(foreground) == "chrome" &&
+            TryReadChromeInputValue(focused, out var chromeValue) && chromeValue.Length == 0)
+        {
+            var rect = focused.Current.BoundingRectangle;
+            if (!rect.IsEmpty && rect.Width > 0 && rect.Height > 0)
+                return new DraftSnapshot(0, $"{foreground}:chrome-empty:{string.Join("-", focused.GetRuntimeId())}",
+                    "", new Bounds(rect.Left, rect.Top, rect.Width, rect.Height), foreground,
+                    focused, null, null, Empty: true, ChromeEmptyValue: true);
+        }
         for (var depth = 0; focused is not null && depth < MaxAncestorDepth; depth++)
         {
             if (NativeEditAdapter.TryRead(focused, foreground, out var native) &&
@@ -439,22 +474,25 @@ internal static class Program
                     focused, null, null, native, 0, Empty: true);
 
             if (focused.Current.ControlType is { } controlType &&
-                (controlType == ControlType.Edit || controlType == ControlType.Document) &&
+                (controlType == ControlType.Edit || controlType == ControlType.Document ||
+                 controlType == ControlType.Custom ||
+                 (controlType == ControlType.ComboBox && GetWindowProcessName(foreground) == "chrome")) &&
                 !focused.Current.IsPassword && focused.Current.IsEnabled &&
                 focused.Current.IsKeyboardFocusable &&
                 focused.TryGetCurrentPattern(TextPattern.Pattern, out var objectPattern) &&
                 objectPattern is TextPattern pattern &&
                 pattern.DocumentRange.GetAttributeValue(TextPattern.IsReadOnlyAttribute) is not true &&
-                pattern.DocumentRange.GetText(2).Length == 0)
+                TryReadEmptyUiaDocument(focused, pattern, out var emptyDocument))
             {
                 var selections = pattern.GetSelection();
-                if (selections.Length == 1 && selections[0].GetText(2).Length == 0)
+                if (selections.Length == 1 && IsCollapsedRange(selections[0]))
                 {
                     var rect = focused.Current.BoundingRectangle;
                     if (!rect.IsEmpty && rect.Width > 0 && rect.Height > 0)
                         return new DraftSnapshot(0, $"{foreground}:uia-empty:{focused.Current.NativeWindowHandle}",
                             "", new Bounds(rect.Left, rect.Top, rect.Width, rect.Height),
-                            foreground, focused, selections[0].Clone(), selections[0].Clone(), Empty: true);
+                            foreground, focused, selections[0].Clone(), selections[0].Clone(),
+                            Empty: true, EmptyDocument: emptyDocument);
                 }
             }
             focused = TreeWalker.ControlViewWalker.GetParent(focused);
@@ -531,7 +569,16 @@ internal static class Program
                 return;
             }
 
-            Console.Error.WriteLine("Writing apply phase: focus target");
+            // Releasing Alt after focusing another app can activate its menu and
+            // steal the caret. Finish the user's shortcut/click before transferring focus.
+            for (var wait = 0; wait < 50 && ApplyInputHeld(); wait++) Thread.Sleep(20);
+            if (ApplyInputHeld())
+            {
+                Emit(new ApplyEvent("applyResult", revision, false, "Hãy nhả phím tắt và chuột rồi thử lại."));
+                return;
+            }
+            Thread.Sleep(40);
+            Console.Error.WriteLine($"Writing apply phase: focus target={GetWindowProcessName(draft.Window)}, empty={draft.Empty}");
             if (!TryPrepareDraftTarget(draft, out var currentPattern))
             {
                 Emit(new ApplyEvent("applyResult", revision, false, "Không thể chuyển về ô đang viết. Hãy thử lại."));
@@ -570,6 +617,7 @@ internal static class Program
             }
             Console.Error.WriteLine("Writing apply phase: type and verify");
             var applied = TypeAndVerify(draft, replacement, out var applyError);
+            Console.Error.WriteLine($"Writing apply result: target={GetWindowProcessName(draft.Window)}, success={applied}, reason={applyError ?? "none"}");
             if (!applied)
             {
                 try
@@ -595,16 +643,14 @@ internal static class Program
         failure = null;
         // Send Unicode keystrokes instead of replacing the user's clipboard.
         // This also works when the clipboard currently contains an image or file.
-        for (var wait = 0; wait < 25 &&
-            (GetAsyncKeyState(0x11) < 0 || GetAsyncKeyState(0x12) < 0 || GetAsyncKeyState(0x10) < 0); wait++)
-            Thread.Sleep(20);
-        if (GetAsyncKeyState(0x11) < 0 || GetAsyncKeyState(0x12) < 0 || GetAsyncKeyState(0x10) < 0)
+        if (ApplyInputHeld())
         {
             failure = "Hãy nhả Ctrl, Alt và Shift rồi thử lại.";
             return false;
         }
         if (GetForegroundWindow() != draft.Window)
         {
+            Console.Error.WriteLine($"Writing focus lost: foreground={GetWindowProcessName(GetForegroundWindow())}");
             failure = "Ô viết mất focus trước khi thay câu. Hãy thử lại.";
             return false;
         }
@@ -652,14 +698,29 @@ internal static class Program
             return false;
         }
 
+        if (draft.ChromeEmptyValue)
+        {
+            // Chrome's empty search fields expose their actual value separately
+            // from a TextPattern range that may contain an embedded-object marker.
+            // Verify the same captured field, never an ancestor page paragraph.
+            for (var attempt = 0; attempt < 14; attempt++)
+            {
+                Thread.Sleep(100);
+                if (TryReadChromeInputValue(draft.Target, out var value) && value == replacement) return true;
+            }
+            failure = "Đã gửi câu nhưng chưa xác nhận được nội dung trong ô Chrome. Hãy kiểm tra ô viết.";
+            return false;
+        }
+
         for (var attempt = 0; attempt < 6; attempt++)
         {
             Thread.Sleep(100);
             var applied = ReadDraft(draft.Window);
-            if (applied is not null && applied.Text == replacement)
+            if (applied is not null && EditorEmptyText.TrimBoundaryMarkers(applied.Text) == replacement)
             {
                 Thread.Sleep(800);
-                if (ReadDraft(draft.Window)?.Text == replacement) return true;
+                var confirmed = ReadDraft(draft.Window);
+                if (confirmed is not null && EditorEmptyText.TrimBoundaryMarkers(confirmed.Text) == replacement) return true;
                 break;
             }
         }
@@ -706,6 +767,10 @@ internal static class Program
                 if (GetForegroundWindow() != draft.Window) ActivateWindow(draft.Window);
                 draft.Target.SetFocus();
                 Thread.Sleep(70);
+                if (draft.ChromeEmptyValue && GetForegroundWindow() == draft.Window &&
+                    Automation.Compare(AutomationElement.FocusedElement, draft.Target) &&
+                    TryReadChromeInputValue(draft.Target, out var chromeValue) && chromeValue.Length == 0)
+                    return true;
                 if (draft.NativeEdit is { } native && GetForegroundWindow() == draft.Window &&
                     NativeEditAdapter.TryRead(draft.Target, draft.Window, out var current) &&
                     current.Handle == native.Handle && current.Value == native.Value)
@@ -778,6 +843,9 @@ internal static class Program
 
     private static bool VerifyEmptyInsertionPoint(DraftSnapshot draft, TextPattern pattern)
     {
+        if (draft.ChromeEmptyValue)
+            return Automation.Compare(AutomationElement.FocusedElement, draft.Target) &&
+                TryReadChromeInputValue(draft.Target, out var value) && value.Length == 0;
         if (draft.Zalo is { } zalo)
             return ZaloTextAdapter.TryVerifyEmptyFocused(draft.Window, zalo);
         if (draft.NativeEdit is { } native)
@@ -785,9 +853,44 @@ internal static class Program
                 NativeEditAdapter.TryRead(draft.Target, draft.Window, out var current) &&
                 current.Handle == native.Handle && current.Value.Length == 0 &&
                 current.SelectionStart == 0 && current.SelectionEnd == 0;
-        if (pattern is null || pattern.DocumentRange.GetText(2).Length != 0) return false;
+        if (pattern is null || !TryReadEmptyUiaDocument(draft.Target, pattern, out var document) ||
+            document != draft.EmptyDocument) return false;
         var selections = pattern.GetSelection();
-        return selections.Length == 1 && selections[0].GetText(2).Length == 0;
+        return selections.Length == 1 && IsCollapsedRange(selections[0]);
+    }
+
+    private static bool ApplyInputHeld() => GetAsyncKeyState(0x11) < 0 ||
+        GetAsyncKeyState(0x12) < 0 || GetAsyncKeyState(0x10) < 0 || IsMouseButtonDown();
+
+    private static bool IsCollapsedRange(TextPatternRange range) =>
+        range.CompareEndpoints(TextPatternRangeEndpoint.Start, range, TextPatternRangeEndpoint.End) == 0;
+
+    private static bool TryReadChromeInputValue(AutomationElement? target, out string value)
+    {
+        value = "";
+        if (target is null) return false;
+        var current = target.Current;
+        if ((current.ControlType != ControlType.Edit && current.ControlType != ControlType.ComboBox) ||
+            current.IsPassword || !current.IsEnabled || !current.IsKeyboardFocusable ||
+            Process.GetProcessById(current.ProcessId).ProcessName != "chrome" ||
+            !target.TryGetCurrentPattern(ValuePattern.Pattern, out var patternObject) ||
+            patternObject is not ValuePattern pattern || pattern.Current.IsReadOnly) return false;
+        value = pattern.Current.Value;
+        return value.Length <= MaxTextLength;
+    }
+
+    private static bool TryReadEmptyUiaDocument(AutomationElement target, TextPattern pattern, out string text)
+    {
+        text = pattern.DocumentRange.GetText(MaxTextLength + 1);
+        if (text.Length > MaxTextLength) return false;
+        bool? valueEmpty = null;
+        if (target.TryGetCurrentPattern(ValuePattern.Pattern, out var valueObject) &&
+            valueObject is ValuePattern value)
+        {
+            if (value.Current.IsReadOnly) return false;
+            valueEmpty = value.Current.Value.Length == 0;
+        }
+        return EditorEmptyText.IsEmpty(text, valueEmpty);
     }
 
     private static bool SendRepeatedKey(ushort key, int count, bool shift)
@@ -819,8 +922,20 @@ internal static class Program
         return false;
     }
 
+    private static string GetWindowProcessName(IntPtr window)
+    {
+        try
+        {
+            GetWindowThreadProcessId(window, out var processId);
+            return processId == 0 ? "unknown" : Process.GetProcessById((int)processId).ProcessName;
+        }
+        catch { return "unknown"; }
+    }
+
     private static bool DraftTextUnchanged(DraftSnapshot draft)
     {
+        if (draft.ChromeEmptyValue)
+            return TryReadChromeInputValue(draft.Target, out var chromeValue) && chromeValue.Length == 0;
         if (draft.Zalo is { } zalo)
             return draft.Empty ? ZaloTextAdapter.TryConfirmEmpty(draft.Window, zalo)
                 : ZaloTextAdapter.TryConfirmUnchanged(draft.Window, zalo,
@@ -835,7 +950,8 @@ internal static class Program
         }
         if (draft.Empty)
             return draft.Target.TryGetCurrentPattern(TextPattern.Pattern, out var objectPattern) &&
-                objectPattern is TextPattern pattern && pattern.DocumentRange.GetText(2).Length == 0;
+                objectPattern is TextPattern pattern &&
+                TryReadEmptyUiaDocument(draft.Target, pattern, out var document) && document == draft.EmptyDocument;
         return draft.ExactRange?.GetText(MaxDraftLength + 1) == draft.Text;
     }
 
@@ -912,7 +1028,8 @@ internal static class Program
     private sealed record DraftSnapshot(int Revision, string SourceKey, string Text, Bounds Bounds,
         IntPtr Window, AutomationElement Target, TextPatternRange? ExactRange, TextPatternRange? CaretRange,
         NativeEditAdapter.State? NativeEdit = null, int? NativeSentenceStart = null,
-        ZaloTextAdapter.State? Zalo = null, int? ZaloSentenceStart = null, bool Empty = false);
+        ZaloTextAdapter.State? Zalo = null, int? ZaloSentenceStart = null, bool Empty = false,
+        string? EmptyDocument = null, bool ChromeEmptyValue = false);
     private sealed record WritingEvent(string Type, int Revision, string Text, Bounds Bounds, bool CanApply = true);
     private sealed record ApplyEvent(string Type, int Revision, bool Success, string? Error);
     private sealed record FocusEvent(string Type, int Revision, bool Success);

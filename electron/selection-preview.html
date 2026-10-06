@@ -10,10 +10,18 @@
     <div class="preview" id="preview">
       <div class="preview-top" id="drag-handle">
         <span class="preview-caption">DỊCH NHANH</span>
-        <span class="drag-hint">Kéo để di chuyển</span>
+        <div class="preview-heading-tools">
+          <span class="drag-hint">Kéo để di chuyển</span>
+          <button class="close-button" id="close-preview" type="button" aria-label="Đóng dịch nhanh" title="Đóng">×</button>
+        </div>
       </div>
-      <p id="translation"></p>
+      <p id="translation" role="status" aria-live="polite"></p>
+      <div class="preview-tools">
+        <button class="speech-button" id="speak-original" type="button" aria-label="Đọc câu tiếng Anh được chọn" aria-pressed="false" title="Bấm để đọc câu tiếng Anh; bấm lần nữa để dừng" hidden><span data-speech-icon>🔊</span> Đọc tiếng Anh</button>
+        <button class="speech-button" id="speak-translation" type="button" aria-label="Nghe bản dịch tiếng Việt" aria-pressed="false" title="Nghe bản dịch tiếng Việt" hidden><span data-speech-icon>🔊</span> Tiếng Việt</button>
+      </div>
     </div>
+    <script src="popup-speech.js"></script>
     <script src="selection-preview.js"></script>
   </body>
 </html>

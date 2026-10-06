@@ -106,6 +106,8 @@ export default function AICoachPage() {
   // Grammar checker state
   const [grammarResult, setGrammarResult] = useState<{ hasError: boolean; correctedText: string; explanation: string } | null>(null);
   const [isCheckingGrammar, setIsCheckingGrammar] = useState(false);
+  const [grammarError, setGrammarError] = useState('');
+  const [grammarRetry, setGrammarRetry] = useState(0);
   const [showWarningBanner, setShowWarningBanner] = useState(false);
   const HISTORY_KEY = `ai_coach_chat_history_${mode}`;
   const WARN_THRESHOLD = 30;
@@ -138,18 +140,26 @@ export default function AICoachPage() {
     }
   }, [messages, sessionStarted, HISTORY_KEY]);
 
-  // Debounced grammar check
+  // Debounced grammar check; discard responses for text the user has already changed.
   useEffect(() => {
-    if (!input.trim() || input.trim().split(/\s+/).length < 3) {
-      setGrammarResult(null);
+    const text = input.trim();
+    const controller = new AbortController();
+    setGrammarResult(null);
+    setGrammarError('');
+    setIsCheckingGrammar(false);
+    if (!text || text.split(/\s+/).length < 2) {
       return;
     }
     const t = setTimeout(async () => {
-      if (!apiKey) return;
+      if (!apiKey.trim()) {
+        setGrammarError('Chưa có Groq API key. Hãy thêm khóa trong Cài đặt.');
+        return;
+      }
       setIsCheckingGrammar(true);
       try {
         const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
+          signal: controller.signal,
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey.trim()}` },
           body: JSON.stringify({
             model: 'openai/gpt-oss-120b',
@@ -157,20 +167,33 @@ export default function AICoachPage() {
               { role: 'system', content: 'You are a grammar checker. Return ONLY a JSON object: {"hasError":boolean,"correctedText":"corrected if error else empty","explanation":"brief Vietnamese explanation if error else empty"}. No markdown, no extra text.' },
               { role: 'user', content: input.trim() }
             ],
-            temperature: 0.1, max_tokens: 120,
+            temperature: 0.1, max_tokens: 300,
             response_format: { type: 'json_object' }
           }),
         });
-        if (res.ok) {
-          const data = await res.json();
-          const parsed = JSON.parse(data.choices?.[0]?.message?.content || '{}');
-          setGrammarResult(parsed);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const parsed = JSON.parse(data.choices?.[0]?.message?.content || '{}');
+        if (typeof parsed.hasError !== 'boolean' ||
+            (parsed.hasError && typeof parsed.correctedText !== 'string')) {
+          throw new Error('Phản hồi không hợp lệ');
         }
-      } catch { /* ignore grammar errors silently */ }
-      setIsCheckingGrammar(false);
-    }, 1200);
-    return () => clearTimeout(t);
-  }, [input, apiKey]);
+        if (!controller.signal.aborted) setGrammarResult({
+          hasError: parsed.hasError,
+          correctedText: parsed.correctedText || '',
+          explanation: typeof parsed.explanation === 'string' ? parsed.explanation : '',
+        });
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          const message = error instanceof Error ? error.message : 'Lỗi không xác định';
+          setGrammarError(`Không kiểm tra được ngữ pháp (${message}).`);
+        }
+      } finally {
+        if (!controller.signal.aborted) setIsCheckingGrammar(false);
+      }
+    }, 800);
+    return () => { clearTimeout(t); controller.abort(); };
+  }, [input, apiKey, grammarRetry]);
 
   // Dismiss selection tooltip when clicking outside
   useEffect(() => {
@@ -722,22 +745,17 @@ export default function AICoachPage() {
             </div>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            📚 {words.length} từ
-          </span>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12 }}>
-            <input type="checkbox" checked={autoSpeak} onChange={e => setAutoSpeak(e.target.checked)}
-              style={{ accentColor: 'var(--accent)' }} />
-            <span>🔊 Tự đọc</span>
+        <div className="lf-ai-session-controls">
+          <span className="lf-ai-word-count">{words.length} từ đang luyện</span>
+          <label className="lf-ai-auto-speak">
+            <input type="checkbox" checked={autoSpeak} onChange={e => setAutoSpeak(e.target.checked)} />
+            <span>Tự động đọc</span>
           </label>
-          <button onClick={() => { speechService.stop(); setIsSpeaking(false); }}
-            style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer' }}>
-            ⏹ Dừng
+          <button className="lf-ai-control-button" type="button" onClick={() => { speechService.stop(); setIsSpeaking(false); }}>
+            Dừng đọc
           </button>
-          <button onClick={() => { setMessages([]); startSession(); }}
-            style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer' }}>
-            🔄 Reset
+          <button className="lf-ai-control-button lf-ai-control-button-primary" type="button" onClick={() => { setMessages([]); startSession(); }}>
+            Bắt đầu lại
           </button>
         </div>
       </div>
@@ -1023,48 +1041,20 @@ export default function AICoachPage() {
                   )}
                 </span>
                 {translatorOutput && !isTranslatingHelper && (
-                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  <div className="lf-ai-helper-actions">
                     <button
+                      className="lf-ai-helper-copy"
                       onClick={handleCopyHelperOutput}
                       title="Sao chép"
-                      style={{
-                        padding: '3px 8px',
-                        fontSize: 11,
-                        borderRadius: 6,
-                        border: '1px solid var(--border)',
-                        background: 'var(--bg-secondary)',
-                        color: 'var(--text-secondary)',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 4,
-                        transition: 'all 0.2s',
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--border-bright)'}
-                      onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
                     >
-                      {helperCopied ? '✓ Đã copy' : '📋 Copy'}
+                      {helperCopied ? 'Đã sao chép' : 'Sao chép'}
                     </button>
                     <button
+                      className="lf-ai-helper-insert"
                       onClick={handleInsertHelperOutput}
                       title="Chèn thẳng vào ô chat"
-                      style={{
-                        padding: '3px 8px',
-                        fontSize: 11,
-                        borderRadius: 6,
-                        border: '1px solid var(--accent)',
-                        background: 'rgba(99, 102, 241, 0.15)',
-                        color: 'var(--accent-bright)',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 4,
-                        transition: 'all 0.2s',
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.25)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.15)'}
                     >
-                      📥 Chèn
+                      Chèn vào ô viết
                     </button>
                   </div>
                 )}
@@ -1135,23 +1125,19 @@ export default function AICoachPage() {
 
         {/* Real-time Grammar Checker Banner */}
         {!isCheckingGrammar && grammarResult && grammarResult.hasError && (
-          <div style={{
-            marginTop: 8, padding: '10px 14px', borderRadius: 10,
-            background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.25)',
-            fontSize: 13, display: 'flex', flexDirection: 'column', gap: 4
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#fca5a5', fontWeight: 600 }}>
+          <div className="lf-ai-grammar-banner">
+            <div className="lf-ai-grammar-title">
               <span>⚠️ Có thể sai ngữ pháp:</span>
             </div>
-            <div style={{ color: 'var(--text-primary)', marginTop: 2 }}>
-              Gợi ý sửa: <strong style={{ color: '#86efac' }}>{grammarResult.correctedText}</strong>
+            <div className="lf-ai-grammar-correction">
+              Gợi ý sửa: <strong>{grammarResult.correctedText}</strong>
             </div>
             {grammarResult.explanation && (
-              <div style={{ color: 'var(--text-secondary)', fontSize: 12, fontStyle: 'italic', marginTop: 2 }}>
+              <div className="lf-ai-grammar-explanation">
                 💡 {grammarResult.explanation}
               </div>
             )}
-            <button className="btn btn-secondary" style={{ alignSelf: 'flex-start', marginTop: 6, padding: '4px 10px', fontSize: 11 }}
+            <button className="lf-ai-grammar-apply" type="button"
               onClick={() => { setInput(grammarResult.correctedText); setGrammarResult(null); }}>
               ✍️ Áp dụng gợi ý sửa
             </button>
@@ -1160,6 +1146,11 @@ export default function AICoachPage() {
         {!isCheckingGrammar && grammarResult && !grammarResult.hasError && (
           <div style={{ fontSize: 11, color: '#10b981', marginTop: 4, textAlign: 'right' }}>
             ✓ Ngữ pháp chuẩn xác!
+          </div>
+        )}
+        {!isCheckingGrammar && grammarError && (
+          <div role="alert" style={{ marginTop: 8, color: '#b42318', fontSize: 13 }}>
+            {grammarError} <button type="button" onClick={() => setGrammarRetry(n => n + 1)}>Thử lại</button>
           </div>
         )}
       </div>

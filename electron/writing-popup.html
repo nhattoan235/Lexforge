@@ -15,9 +15,9 @@
           <button class="close-button" id="dismiss" type="button" aria-label="Bỏ qua gợi ý" title="Bỏ qua">×</button>
         </div>
       </div>
-      <div class="label" id="target-label">Câu sẽ thay</div>
+      <div class="label-line" id="target-label-row"><div class="label" id="target-label">Câu sẽ thay</div><button class="speech-button" id="speak-target" type="button" aria-label="Nghe câu hiện tại" aria-pressed="false" title="Nghe câu hiện tại"><span data-speech-icon>🔊</span> Nghe</button></div>
       <p class="target-sentence" id="target-sentence"></p>
-      <div class="label" id="suggestion-label">Câu đề xuất</div>
+      <div class="label-line" id="suggestion-label-row"><div class="label" id="suggestion-label">Câu đề xuất</div><button class="speech-button" id="speak-suggestion" type="button" aria-label="Nghe câu đề xuất" aria-pressed="false" title="Nghe câu đề xuất"><span data-speech-icon>🔊</span> Nghe</button></div>
       <p class="suggestion" id="suggestion"></p>
       <div class="action-row">
         <button class="accept-button" id="accept" type="button" aria-label="Áp dụng câu đề xuất" title="Ctrl+Alt+1">✓ <span>Áp dụng</span></button>
@@ -30,13 +30,14 @@
         <textarea id="vietnamese-input" maxlength="300" placeholder="Nhập từ hoặc câu bạn muốn diễn đạt…"></textarea>
         <button class="translate-button" id="translate" type="button" title="Ctrl+Alt+4">Dịch sang tiếng Anh <small>Ctrl+Alt+4</small></button>
         <div class="translation-result" id="translation-result" hidden>
-          <div class="label">Câu tiếng Anh</div>
+          <div class="label-line"><div class="label">Câu tiếng Anh</div><button class="speech-button" id="speak-english" type="button" aria-label="Nghe câu tiếng Anh" aria-pressed="false" title="Nghe câu tiếng Anh"><span data-speech-icon>🔊</span> Nghe</button></div>
           <p id="english-output"></p>
           <button class="insert-button" id="insert" type="button" title="Ctrl+Alt+5">✓ Thay câu đang viết <small>Ctrl+Alt+5</small></button>
         </div>
       </section>
       <p class="error" id="error" role="status" hidden></p>
     </section>
+    <script src="popup-speech.js"></script>
     <script src="writing-popup.js"></script>
   </body>
 </html>

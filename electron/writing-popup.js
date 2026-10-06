@@ -4,7 +4,9 @@
   const suggestion = document.getElementById('suggestion');
   const targetSentence = document.getElementById('target-sentence');
   const targetLabel = document.getElementById('target-label');
+  const targetLabelRow = document.getElementById('target-label-row');
   const suggestionLabel = document.getElementById('suggestion-label');
+  const suggestionLabelRow = document.getElementById('suggestion-label-row');
   const shortcutHint = document.getElementById('shortcut-hint');
   const error = document.getElementById('error');
   const vietnamesePanel = document.getElementById('vietnamese-panel');
@@ -17,7 +19,11 @@
   const translateToggle = document.getElementById('translate-toggle');
   const dragHandle = document.querySelector('.popup-top');
   const themeToggle = document.getElementById('theme-toggle');
+  const speakTarget = document.getElementById('speak-target');
+  const speakSuggestion = document.getElementById('speak-suggestion');
+  const speakEnglish = document.getElementById('speak-english');
   let revision = 0;
+  let original = '';
   let corrected = '';
   let english = '';
   let manual = false;
@@ -71,21 +77,24 @@
   }
 
   api.onSuggestion((payload) => {
+    window.popupSpeech.stop();
     const preserveInput = manual && payload.manual && revision === payload.revision;
     revision = payload.revision;
     manual = Boolean(payload.manual);
     const failed = typeof payload.failure === 'string' && Boolean(payload.failure);
     corrected = failed ? '' : payload.corrected;
+    original = payload.original || '';
     const hasTarget = Boolean(payload.original);
-    targetLabel.hidden = !hasTarget;
+    targetLabelRow.hidden = !hasTarget;
     targetSentence.hidden = !hasTarget;
     targetSentence.textContent = payload.original || '';
-    suggestionLabel.hidden = !hasTarget;
+    suggestionLabelRow.hidden = !hasTarget;
     suggestion.hidden = !hasTarget;
     suggestionLabel.textContent = failed ? 'Chưa thể tạo gợi ý' : 'Câu đề xuất';
     suggestion.dataset.failed = String(failed);
     suggestion.textContent = failed ? payload.failure : payload.checking ? 'Đang kiểm tra câu…' :
       corrected || (manual && hasTarget ? 'Câu này chưa cần sửa.' : '');
+    speakSuggestion.hidden = failed || Boolean(payload.checking) || !corrected;
     acceptButton.hidden = failed || !corrected || payload.canApply === false;
     translateToggle.hidden = failed || manual;
     shortcutHint.hidden = failed && !manual;
@@ -100,6 +109,7 @@
       english = '';
       vietnameseInput.value = '';
       translationResult.hidden = true;
+      speakEnglish.hidden = true;
       vietnamesePanel.hidden = !manual;
       translateToggle.setAttribute('aria-expanded', String(manual));
     }
@@ -109,7 +119,14 @@
     if (manual && !preserveInput) setTimeout(() => vietnameseInput.focus(), 80);
   });
 
-  const dismiss = () => api.dismiss(revision);
+  speakTarget.addEventListener('click', () => window.popupSpeech.speak(original, 'en-US', speakTarget));
+  speakSuggestion.addEventListener('click', () => window.popupSpeech.speak(corrected, 'en-US', speakSuggestion));
+  speakEnglish.addEventListener('click', () => window.popupSpeech.speak(english, 'en-US', speakEnglish));
+
+  const dismiss = () => {
+    window.popupSpeech.stop();
+    api.dismiss(revision);
+  };
   document.getElementById('dismiss').addEventListener('click', dismiss);
   document.getElementById('dismiss-secondary').addEventListener('click', dismiss);
   translateToggle.addEventListener('click', () => {
@@ -138,7 +155,9 @@
   });
   vietnameseInput.addEventListener('input', () => {
     english = '';
+    window.popupSpeech.stop();
     translationResult.hidden = true;
+    speakEnglish.hidden = true;
     showError('');
   });
 
@@ -163,6 +182,7 @@
     english = result.translation;
     englishOutput.textContent = english;
     translationResult.hidden = false;
+    speakEnglish.hidden = !english;
     reportHeight();
     setTimeout(() => popup.scrollTo({ top: popup.scrollHeight, behavior: 'smooth' }), 80);
   });

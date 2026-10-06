@@ -1,7 +1,7 @@
 @import url("popup-theme.css");
 
 * { box-sizing: border-box; }
-html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; }
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: var(--popup-bg); }
 body { padding: 2px; }
 .preview {
   width: 100%; padding: 10px 13px 11px;
@@ -9,8 +9,16 @@ body { padding: 2px; }
   border-radius: 11px; background: var(--popup-bg); color: var(--popup-text);
 }
 .preview-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 17px; cursor: move; user-select: none; -webkit-app-region: drag; app-region: drag; }
+.preview-heading-tools { display: flex; align-items: center; gap: 6px; }
+.close-button { width: 24px; height: 24px; padding: 0; border: 1px solid var(--popup-border); border-radius: 7px; background: var(--popup-quiet); color: var(--popup-text); font: inherit; font-size: 17px; line-height: 1; cursor: pointer; -webkit-app-region: no-drag; app-region: no-drag; }
+.close-button:hover { background: var(--popup-quiet-hover); }
+.preview-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.speech-button[hidden] { display: none; }
 .preview-caption { color: var(--popup-accent); font-size: 10px; font-weight: 850; letter-spacing: .9px; }
 .drag-hint { color: var(--popup-subtle); font-size: 10px; font-weight: 500; white-space: nowrap; }
+.speech-button { min-height: 24px; padding: 0 7px; border: 1px solid var(--popup-border); border-radius: 7px; background: var(--popup-quiet); color: var(--popup-text); font: inherit; font-size: 10px; font-weight: 750; cursor: pointer; -webkit-app-region: no-drag; app-region: no-drag; }
+.speech-button:hover { background: var(--popup-quiet-hover); }
+.speech-button[data-speaking="true"] { border-color: var(--popup-accent); color: var(--popup-accent); }
 .preview[data-failed="true"] { border-left-color: var(--popup-danger); }
 .preview[data-failed="true"] .preview-caption { color: var(--popup-danger); }
 .preview p { margin: 5px 0 0; font-size: 14px; font-weight: 650; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-wrap; }

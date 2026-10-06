@@ -8,5 +8,6 @@
   <ItemGroup>
     <Compile Include="../selection-monitor/SentenceSegmenter.cs" Link="SentenceSegmenter.cs" />
     <Compile Include="../selection-monitor/InputReadScheduler.cs" Link="InputReadScheduler.cs" />
+    <Compile Include="../selection-monitor/EditorEmptyText.cs" Link="EditorEmptyText.cs" />
   </ItemGroup>
 </Project>

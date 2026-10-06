@@ -13,8 +13,12 @@ Bạn có thể đổi sáng/tối ở bảng trợ lý hoặc popup viết. Pop
 ## Dịch nhanh đoạn tiếng Anh đang chọn
 
 1. Trong ứng dụng đang đọc hoặc viết, bôi đen một từ, cụm từ hoặc câu tiếng Anh.
-2. Giữ nguyên vùng chọn và chờ khoảng **0,5 giây**, cộng thêm thời gian Groq trả lời. Popup **DỊCH NHANH** sẽ hiện gần vùng chọn.
+2. Giữ nguyên vùng chọn và chờ khoảng **0,5 giây**. Popup **DỊCH NHANH** hiện gần vùng chọn với trạng thái **Đang dịch…**, sau đó cập nhật khi Groq trả lời.
 3. Nếu popup che chữ, giữ chuột trên dòng **DỊCH NHANH · Kéo để di chuyển**, kéo đến vị trí khác rồi thả.
+4. Bấm **🔊 Đọc tiếng Anh** để nghe đúng câu đã bôi đen. Bấm lại để dừng. Nút này dùng được cả khi đang chờ dịch hoặc dịch gặp lỗi.
+5. Khi đã có bản dịch, có thể bấm **🔊 Tiếng Việt** để nghe bản dịch. Chọn đoạn khác hoặc đóng popup sẽ dừng giọng đọc cũ.
+
+Phần đọc sử dụng giọng có sẵn qua hệ thống phát âm của ứng dụng, ưu tiên giọng cục bộ; không gọi API Groq để tạo âm thanh. Giọng tiếng Việt phụ thuộc giọng được hỗ trợ trên máy.
 
 Khi chọn đoạn khác, popup cũ được thay bằng bản dịch mới. Dịch nhanh chỉ đọc và hiển thị bản dịch; nó không sửa văn bản gốc.
 
