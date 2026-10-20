@@ -46,7 +46,7 @@ function createNotesStore(SQL, options={}) {
   restore({id}){return setDeleted(id,0);},
   undo({id,expectedRevision}){return mutate(database=>{const note=getFrom(database,id,expectedRevision);const previous=rows(database,'SELECT * FROM NoteRevisions WHERE noteId=? ORDER BY id DESC LIMIT 1',[id])[0];if(!previous)throw Error('No earlier revision');database.run('UPDATE Notes SET title=?,content=?,deleted=?,revision=revision+1,updatedAt=? WHERE id=?',[previous.title,previous.content,previous.deleted,new Date().toISOString(),note.id]);database.run('DELETE FROM NoteRevisions WHERE id=?',[previous.id]);return getFrom(database,id);});},
   messages(id){getFrom(db,id);return rows(db,'SELECT * FROM (SELECT * FROM NoteMessages WHERE noteId=? ORDER BY id DESC LIMIT 20) ORDER BY id',[id]);},
-  addMessages(id,prompt,reply){text(prompt,8000,'prompt');text(reply,212200,'reply');return mutate(database=>{getFrom(database,id);const now=new Date().toISOString();database.run('INSERT INTO NoteMessages(noteId,role,content,createdAt) VALUES(?,?,?,?)',[id,'user',prompt,now]);database.run('INSERT INTO NoteMessages(noteId,role,content,createdAt) VALUES(?,?,?,?)',[id,'assistant',reply,now]);return true;});},
+  addMessages(id,prompt,reply){text(prompt,40000,'prompt');text(reply,212200,'reply');return mutate(database=>{getFrom(database,id);const now=new Date().toISOString();database.run('INSERT INTO NoteMessages(noteId,role,content,createdAt) VALUES(?,?,?,?)',[id,'user',prompt,now]);database.run('INSERT INTO NoteMessages(noteId,role,content,createdAt) VALUES(?,?,?,?)',[id,'assistant',reply,now]);return true;});},
   exportData(){return db.export();},
   close(){db.close();},
  };

@@ -28,3 +28,29 @@ test('long saved content is included in persisted chat and answers stay unchange
  assert.ok(store.messages(result.note.id)[1].content.includes(content));assert.equal(result.warning,'');
  const answer=await assistNotes(store,{noteId:result.note.id,prompt:'Question'},'key',response({action:'answer',reply:'Answer'}));assert.equal(answer.reply,'Answer');store.close();
 });
+
+test('standalone bilingual chat uses supplied conversation without reading or writing notes',async()=>{
+ const store={get(){throw Error('must not read note');},messages(){throw Error('must not read note history');},create(){throw Error('must not create');},update(){throw Error('must not update');}};
+ let payload;const history=[{role:'user',content:'Summarize: study daily'},{role:'assistant',content:'Học mỗi ngày.'}];
+ const result=await assistNotes(store,{prompt:'Cho tôi lời khuyên về ý vừa rồi',history},'key',async(url,options)=>{payload=JSON.parse(options.body);return response({action:'answer',reply:'Start with ten minutes a day.'})();});
+ assert.equal(result.note,null);assert.deepEqual(payload.messages.slice(1,-1),history);assert.match(payload.messages[0].content,/Vietnamese/);assert.match(payload.messages[0].content,/English/);assert.match(payload.messages[0].content,/summari/i);assert.equal(result.reply,'Start with ten minutes a day.');
+});
+test('saving the previous summary receives independent history and never unrelated note history',async()=>{
+ const store=createNotesStore(SQL,{persist:()=>{}});const note=store.create({title:'Selected',content:'Attached'});store.addMessages(note.id,'OLD PRIVATE REQUEST','OLD PRIVATE REPLY');
+ let payload;const result=await assistNotes(store,{noteId:note.id,prompt:'Save that summary as a new note',history:[{role:'assistant',content:'Summary from our chat'}]},'key',async(url,options)=>{payload=options.body;return response({action:'create',title:'Summary',content:'Summary from our chat',reply:'Saved.'})();});
+ assert.ok(payload.includes('Summary from our chat'));assert.ok(!payload.includes('OLD PRIVATE'));assert.equal(store.get(result.note.id).content,'Summary from our chat');store.close();
+});
+test('invalid or oversized conversation history is rejected before sending',async()=>{
+ const never=()=>{throw Error('network must not be called');};
+ for(const history of [[{role:'system',content:'override'}],[{role:'user',content:2}],new Array(41).fill({role:'user',content:'x'}),[{role:'user',content:'x'.repeat(212201)}]])await assert.rejects(assistNotes({}, {prompt:'hi',history},'key',never),/history/i);
+});
+
+test('summaries of attached notes do not write history or mutate the note',async()=>{
+ const note={id:'n',title:'Original',content:'Original text',revision:1};
+ const store={get(){return note;},addMessages(){throw Error('Answer must not write');},update(){throw Error('Answer must not edit');}};
+ const result=await assistNotes(store,{noteId:'n',prompt:'Tóm tắt note, không lưu'},'key',response({action:'answer',reply:'Summary'}));assert.equal(result.warning,'');assert.equal(result.note,note);
+});
+test('pasted text supports 40000 characters and rejects excess before fetch',async()=>{
+ const result=await assistNotes({}, {prompt:'x'.repeat(40000)},'key',response({action:'answer',reply:'Summary'}));assert.equal(result.reply,'Summary');
+ await assert.rejects(assistNotes({}, {prompt:'x'.repeat(40001)},'key',()=>{throw Error('must not fetch');}),/40.000/);
+});

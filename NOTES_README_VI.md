@@ -55,3 +55,17 @@ npm run build
 ```
 
 Tên TXT dùng tối đa 8 từ đầu của nội dung (tối đa 60 ký tự), kèm ngày tạo DD-MM-YYYY. Tên trùng thêm số; xử lý trên máy. Khi tạo hoặc cập nhật qua trợ lý, chat lưu cả tiêu đề và toàn bộ nội dung đã lưu.
+
+## Trợ lý AI hội thoại
+
+- Hiểu tiếng Việt, English hoặc câu xen kẽ; mặc định trả lời theo ngôn ngữ yêu cầu.
+- Tóm tắt văn bản paste vào hoặc cho lời khuyên ngay trong chat. Chỉ tạo/sửa note khi yêu cầu lưu rõ ràng; paste không có chỉ dẫn thì hỏi lại.
+- Có thể nói “Lưu phần tóm tắt vừa rồi thành note” trong cùng hội thoại.
+- Chat độc lập với lựa chọn note. Bật **Đính kèm note đang chọn** khi cần AI đọc/sửa note đó. Nội dung đã gửi vẫn có thể xuất hiện trong ngữ cảnh chat sau khi bỏ đính kèm.
+- Chat lưu tối đa 40 tin gần nhất trong localStorage của ứng dụng; gửi tối đa 12 tin gần nhất, mỗi tin tối đa 12.000 ký tự, làm ngữ cảnh. Ô yêu cầu nhận tối đa 40.000 ký tự. Nút **Hội thoại mới** xóa chat hiện tại, không xóa note.
+- Giọng nói nhận dạng local; văn bản yêu cầu, ngữ cảnh chat và note đính kèm được gửi tới Groq khi bấm Gửi AI. Cần mạng và API key; giới hạn Groq vẫn áp dụng.
+- Chat không phụ thuộc thư mục TXT đang kết nối; thao tác lưu note vẫn yêu cầu thư mục hợp lệ.
+
+Trợ lý mặc định trả lời bằng văn xuôi ngắn, tự nhiên, không tiêu đề Markdown, dấu in đậm, emoji hoặc danh sách theo khuôn. Vẫn dùng checklist, mã nguồn hay định dạng khác nếu người dùng yêu cầu rõ; không tự lọc ký hiệu khỏi văn bản gốc.
+
+Giao diện chat mở rộng vùng đọc; thông tin xử lý dữ liệu nằm trong Tùy chọn. Ô nhập trống: Enter gửi, Shift+Enter xuống dòng; Enter trong lúc IME đang ghép chữ không gửi. Giữ nút micro và nút gửi để thao tác bằng chuột.

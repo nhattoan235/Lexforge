@@ -2164,6 +2164,12 @@ ipcMain.handle('notes:request', async (event, operation, args = {}) => {
       const chosen = await dialog.showOpenDialog(mainWindow, { title: 'Chọn thư mục lưu ghi chú', properties: ['openDirectory'] });
       return { success: true, data: chosen.canceled ? null : chosen.filePaths[0] };
     }
+    // Conversation works even when the chosen notes drive is unavailable.
+    if (operation === 'assist') {
+      const settings = db.exec('SELECT SettingValue FROM UserSettings WHERE SettingKey = ?', ['groq_api_key']);
+      const lazyStore = Object.fromEntries(['get', 'create', 'update', 'addMessages'].map(name => [name, (...values) => notesStorage.getStore()[name](...values)]));
+      return { success: true, data: await assistNotes(lazyStore, args, settings[0]?.values?.[0]?.[0]) };
+    }
     const notesStore = notesStorage.getStore();
     let data;
     switch (operation) {
@@ -2175,11 +2181,6 @@ ipcMain.handle('notes:request', async (event, operation, args = {}) => {
       case 'restore': data = notesStore.restore(args); break;
       case 'undo': data = notesStore.undo(args); break;
       case 'messages': data = notesStore.messages(args.id); break;
-      case 'assist': {
-        const settings = db.exec('SELECT SettingValue FROM UserSettings WHERE SettingKey = ?', ['groq_api_key']);
-        data = await assistNotes(notesStore, args, settings[0]?.values?.[0]?.[0]);
-        break;
-      }
       default: throw new Error('Unknown notes operation');
     }
     return { success: true, data };
