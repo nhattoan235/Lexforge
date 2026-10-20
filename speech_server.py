@@ -7,7 +7,7 @@ from flask import Flask, Request, jsonify, request
 from flask_cors import CORS
 from werkzeug.exceptions import RequestEntityTooLarge
 
-MODEL_PATH = Path(__file__).resolve().parent / "models" / "small"
+MODEL_PATH = Path(os.environ.get("LEXFORGE_SPEECH_MODELS", str(Path(__file__).resolve().parent / "models"))) / "small"
 
 class MemoryRequest(Request):
     # Flask normally spools larger uploads to disk; keep microphone audio in RAM.

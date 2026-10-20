@@ -12,13 +12,16 @@
     "build:selection-monitor:dev": "cross-env APPDATA=$INIT_CWD/.nuget-home NUGET_PACKAGES=$INIT_CWD/.nuget-home/packages dotnet restore electron/selection-monitor/Lexforge.SelectionMonitor.csproj --configfile electron/selection-monitor/NuGet.Config && cross-env APPDATA=$INIT_CWD/.nuget-home NUGET_PACKAGES=$INIT_CWD/.nuget-home/packages dotnet build electron/selection-monitor/Lexforge.SelectionMonitor.csproj --configuration Release --no-restore",
     "build:selection-monitor": "cross-env APPDATA=$INIT_CWD/.nuget-home NUGET_PACKAGES=$INIT_CWD/.nuget-home/packages dotnet restore electron/selection-monitor/Lexforge.SelectionMonitor.csproj --runtime win-x64 --source https://api.nuget.org/v3/index.json --configfile electron/selection-monitor/NuGet.Config -p:RuntimeFrameworkVersion=10.0.10 && cross-env APPDATA=$INIT_CWD/.nuget-home NUGET_PACKAGES=$INIT_CWD/.nuget-home/packages dotnet publish electron/selection-monitor/Lexforge.SelectionMonitor.csproj --configuration Release --runtime win-x64 --self-contained true -p:RuntimeFrameworkVersion=10.0.10 -p:PublishSingleFile=true -p:DebugType=None --no-restore --output electron/selection-monitor/publish",
     "electron-dev": "npm run build:selection-monitor:dev && concurrently \"cross-env BROWSER=none npm start\" \"wait-on --timeout 300000 --interval 1000 http://localhost:3000 && electron .\"",
-    "pack": "npm run build && npm run build:selection-monitor && electron-builder --dir",
-    "dist": "npm run build && npm run build:selection-monitor && electron-builder",
-    "dist:win": "npm run build && npm run build:selection-monitor && electron-builder --win",
+    "pack": "npm run build && npm run build:selection-monitor && npm run build:speech-runtime && electron-builder --dir",
+    "dist": "npm run build && npm run build:selection-monitor && npm run build:speech-runtime && electron-builder",
+    "dist:win": "npm run build && npm run build:selection-monitor && npm run build:speech-runtime && electron-builder --win",
     "prestart": "node scripts/prepare-vad.cjs",
     "prebuild": "node scripts/prepare-vad.cjs",
     "test": "react-scripts test",
-    "test:chat-ui": "node scripts/test-floating-chat.cjs"
+    "test:chat-ui": "node scripts/test-floating-chat.cjs",
+    "build:speech-runtime": ".venv\\Scripts\\python.exe -m PyInstaller --noconfirm --onedir --name lexforge-speech --distpath dist/speech-runtime --workpath models/test-fixtures/speech-build --specpath models/test-fixtures --collect-all faster_whisper --collect-all ctranslate2 --collect-all tokenizers --collect-all onnxruntime --collect-all av speech_server.py",
+    "test:packaged-chat": "node scripts/test-packaged-chat.cjs",
+    "test:writing-drag": "node scripts/test-writing-drag.cjs"
   },
   "build": {
     "appId": "com.toeic.vocabmaster",
@@ -59,12 +62,31 @@
       "electron/assistant-chat-host.js",
       "electron/assistant-chat-host.css",
       "electron/notes-storage.cjs",
-      "electron/notes-text-store.cjs"
+      "electron/notes-text-store.cjs",
+      "electron/local-speech.cjs"
     ],
     "extraResources": [
       {
         "from": "electron/selection-monitor/publish",
         "to": "selection-monitor"
+      },
+      {
+        "from": "dist/speech-runtime/lexforge-speech",
+        "to": "speech"
+      },
+      {
+        "from": "models/small",
+        "to": "speech/models/small",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "models/small.en",
+        "to": "speech/models/small.en",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {

@@ -1,0 +1,5 @@
+const test=require('node:test'),assert=require('node:assert/strict');
+const {startLocalSpeech}=require('../local-speech.cjs');
+test('reuses existing local recognition without spawning or killing it',async()=>{let spawned=false;const service=startLocalSpeech('D:/app',{probe:async()=>true,spawn:()=>{spawned=true;},exists:()=>true});await service.ready;service.stop();assert.equal(spawned,false);});
+test('starts bundled recognition hidden with model path and stops only its child',async()=>{let probes=0,options,killed=false;const child={once(){},exitCode:null,kill(){killed=true;}};const service=startLocalSpeech('D:/app',{probe:async()=>++probes>1,spawn:(exe,args,input)=>{options={exe,...input};return child;},exists:()=>true,wait:async()=>{}});await service.ready;assert.equal(options.windowsHide,true);assert.match(options.env.LEXFORGE_SPEECH_MODELS,/speech[\\/]models$/);service.stop();assert.equal(killed,true);});
+test('missing packaged recognition reports an error without spawning',async()=>{const service=startLocalSpeech('D:/missing',{probe:async()=>false,exists:()=>false});await assert.rejects(service.ready,/không tìm thấy/i);});

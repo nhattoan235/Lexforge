@@ -1,3 +1,4 @@
+const { startLocalSpeech } = require('./local-speech.cjs');
 const { createConversations } = require('./conversations.cjs');
 const { createNotesStorage } = require('./notes-storage.cjs');
 const { assistNotes } = require('./notes-assistant.cjs');
@@ -27,6 +28,7 @@ let startupShownAt = 0;
 let startupShownPromise = Promise.resolve();
 let startupPagePromise = Promise.resolve();
 let assistantWindow;
+let packagedSpeech;
 let selectionPreviewWindow;
 let writingWindow;
 let manualWritingPosition = null;
@@ -303,6 +305,10 @@ if (!hasSingleInstanceLock) {
     chatShortcutAvailable = Boolean(chatShortcut);
     if (!chatShortcutAvailable) console.warn('Could not register AI chat shortcut.');
     else console.log('AI chat shortcut:', chatShortcut);
+    if (app.isPackaged) {
+      packagedSpeech = startLocalSpeech(process.resourcesPath);
+      packagedSpeech.ready.catch(error => console.error('Local speech startup:',error.message));
+    }
     createWindow();
     scheduleAssistantStartup();
   });
@@ -317,6 +323,7 @@ if (!hasSingleInstanceLock) {
   });
   app.on('before-quit', () => {
     appIsQuitting = true;
+    packagedSpeech?.stop();
     globalShortcut.unregister(WRITING_OPEN_SHORTCUT);
     if (assistantTray) {
       assistantTray.destroy();
@@ -1162,7 +1169,7 @@ function positionWritingWindow(height, revision) {
   const y = Math.min(Math.max(preferredTop, workArea.y), workArea.y + workArea.height - popupHeight);
   positioningWritingWindow = true;
   try {
-    lastProgrammaticWritingBounds = { x: Math.round(x), y: Math.round(y) };
+    lastProgrammaticWritingBounds = { x: Math.round(x), y: Math.round(y), width, height: popupHeight };
     writingWindow.setBounds({ x: Math.round(x), y: Math.round(y), width, height: popupHeight }, false);
   }
   finally { positioningWritingWindow = false; }
@@ -1813,20 +1820,20 @@ ipcMain.on('assistant:writing-drag-start', (event) => {
   if (!writingWindow || writingWindow.isDestroyed()) return;
   const cursor = screen.getCursorScreenPoint();
   const bounds = writingWindow.getBounds();
-  writingDragState = { offsetX: cursor.x - bounds.x, offsetY: cursor.y - bounds.y };
+  writingDragState = { offsetX: cursor.x - bounds.x, offsetY: cursor.y - bounds.y, width: lastProgrammaticWritingBounds?.width ?? bounds.width, height: lastProgrammaticWritingBounds?.height ?? bounds.height };
 });
 ipcMain.on('assistant:writing-drag-move', (event) => {
   assertWritingSender(event);
   if (!writingDragState || !writingWindow || writingWindow.isDestroyed()) return;
   const cursor = screen.getCursorScreenPoint();
-  const bounds = writingWindow.getBounds();
   const next = clampBoundsToWorkArea({
     x: cursor.x - writingDragState.offsetX,
     y: cursor.y - writingDragState.offsetY,
-    width: bounds.width,
-    height: bounds.height,
+    width: writingDragState.width,
+    height: writingDragState.height,
   });
-  writingWindow.setPosition(Math.round(next.x), Math.round(next.y));
+  // Pin the drag-start size: Windows rounds setPosition sizes on mixed-DPI displays.
+  writingWindow.setBounds({ x: Math.round(next.x), y: Math.round(next.y), width: next.width, height: next.height }, false);
   manualWritingPosition = { x: Math.round(next.x), y: Math.round(next.y), revision: writingDraft?.revision };
 });
 ipcMain.on('assistant:writing-drag-end', (event) => {
