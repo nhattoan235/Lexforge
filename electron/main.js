@@ -1,3 +1,4 @@
+const { createConversations } = require('./conversations.cjs');
 const { createNotesStorage } = require('./notes-storage.cjs');
 const { assistNotes } = require('./notes-assistant.cjs');
 const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, screen, clipboard, globalShortcut, dialog } = require('electron');
@@ -293,6 +294,15 @@ if (!hasSingleInstanceLock) {
     createAssistantTray();
     if (!globalShortcut.register(WRITING_OPEN_SHORTCUT, openWritingPopupWithShortcut))
       console.warn(`Could not register writing shortcut ${WRITING_OPEN_SHORTCUT}.`);
+    const openChat = () => {
+      showAssistantPanel();
+      const open = () => assistantWindow?.webContents.send('assistant:open-chat');
+      if (assistantWindow.webContents.isLoading()) assistantWindow.webContents.once('did-finish-load', open); else open();
+    };
+    chatShortcut = ['Control+Alt+A','Control+Shift+Space'].find(shortcut => globalShortcut.register(shortcut, openChat)) || null;
+    chatShortcutAvailable = Boolean(chatShortcut);
+    if (!chatShortcutAvailable) console.warn('Could not register AI chat shortcut.');
+    else console.log('AI chat shortcut:', chatShortcut);
     createWindow();
     scheduleAssistantStartup();
   });
@@ -1952,6 +1962,9 @@ const DB_PATH = path.join(userDataPath, 'vocab.db');
 let db = null;
 let SQL = null;
 let notesStorage = null;
+let conversations = null;
+let chatShortcutAvailable = false;
+let chatShortcut = null;
 
 async function initDatabase() {
   SQL = await initSqlJs();
@@ -1981,6 +1994,18 @@ async function initDatabase() {
         else db.run('UPDATE UserSettings SET SettingValue = ? WHERE SettingKey = ?', [previous, 'notes_storage_directory']);
         throw error;
       }
+    },
+  });
+  conversations = createConversations({
+    filePath: path.join(userDataPath, 'assistant-conversations.json'),
+    respond: args => {
+      const apiKey = db.exec('SELECT SettingValue FROM UserSettings WHERE SettingKey = ?', ['groq_api_key'])[0]?.values?.[0]?.[0];
+      const store = Object.fromEntries(['get','create','update','addMessages'].map(name => [name, (...values) => notesStorage.getStore()[name](...values)]));
+      return assistNotes(store, args, apiKey);
+    },
+    onChange: state => {
+      const payload = {...state,shortcutAvailable:chatShortcutAvailable,shortcut:chatShortcut};
+      for (const window of [mainWindow, assistantWindow]) if (window && !window.isDestroyed()) window.webContents.send('assistant:chat-changed', payload);
     },
   });
   console.log('✅ sql.js DB initialized at:', DB_PATH);
@@ -2185,4 +2210,29 @@ ipcMain.handle('notes:request', async (event, operation, args = {}) => {
     }
     return { success: true, data };
   } catch (error) { return { success: false, error: error.message }; }
+});
+
+// A separate channel keeps conversation access apart from the existing writing tools.
+ipcMain.handle('assistant:chat', async (event, operation, args = {}) => {
+  try {
+    if (![mainWindow,assistantWindow].some(window => window && !window.isDestroyed() && window.webContents.id === event.sender.id)) throw Error('Unexpected chat sender.');
+    if (!conversations) throw Error('Hội thoại đang khởi động. Hãy thử lại.');
+    if (!args || typeof args !== 'object' || Array.isArray(args)) throw Error('Invalid chat request');
+    let data;
+    switch (operation) {
+      case 'url': data = isDev ? 'http://localhost:3000/?assistantChat=1' : require('node:url').pathToFileURL(path.join(__dirname,'../build/index.html')).href+'?assistantChat=1'; break;
+      case 'snapshot': data = {...conversations.snapshot(),shortcutAvailable:chatShortcutAvailable,shortcut:chatShortcut}; break;
+      case 'settings': data = conversations.settings(args); break;
+      case 'claimSpeech': data = conversations.claimSpeech(args.id,args.messageId); break;
+      case 'create': data = conversations.create(); break;
+      case 'select': data = conversations.select(args.id); break;
+      case 'draft': data = conversations.draft(args.id,args.text); break;
+      case 'read': data = conversations.read(args.id,args.lastId); break;
+      case 'remove': data = conversations.remove(args.id); break;
+      case 'migrate': data = conversations.migrate(args.messages); break;
+      case 'send': data = await conversations.send(args.id,args.prompt,args.noteId); break;
+      default: throw Error('Unknown chat operation');
+    }
+    return {success:true,data};
+  } catch(error) { return {success:false,error:error.message}; }
 });

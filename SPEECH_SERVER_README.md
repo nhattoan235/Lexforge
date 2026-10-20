@@ -21,7 +21,7 @@ No API key, billing account, or CUDA installation is required for speech recogni
 ## Run
 
 Double-click start_speech_server.bat, then run npm run electron-dev in another terminal.
-In AI Coach choose Luyen Noi, start a session, record up to 30 seconds. Silero VAD automatically stops after about 1.8 seconds
+In AI Coach choose Luyen Noi, start a session, record up to 30 seconds. Silero VAD automatically stops after about 1.5 seconds
 of silence following valid speech; manual stop remains available.
 Wait for local transcription, review the text, and press Send if you want Groq to reply.
 Keep the server window open while using the microphone.

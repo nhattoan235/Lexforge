@@ -89,7 +89,7 @@ export function useLocalDictation(onText: (text: string) => void, language: 'en'
           }
         }
       };
-      // Silero runs locally and ends only a valid speech segment after 1.8 s of silence.
+      // Silero runs locally and ends only a valid speech segment after 1.5 s of silence.
       vad = await startLocalVad(stream, stopRecording);
       if (cancelled) { releaseMicrophone(); return; }
       mediaRecorder.start();

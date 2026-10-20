@@ -6,12 +6,14 @@
     <meta name="color-scheme" content="dark" />
     <title>Trợ lý tiếng Anh</title>
     <link rel="stylesheet" href="assistant-widget.css" />
+    <link rel="stylesheet" href="assistant-chat-host.css" />
   </head>
   <body>
     <main id="assistant-shell" aria-label="Trợ lý tiếng Anh">
       <div class="launcher-stage" id="launcher-stage">
         <button class="launcher" id="launcher" type="button" aria-label="Mở trợ lý tiếng Anh" title="Kéo để di chuyển · bấm để mở">
           <img class="launcher-symbol" src="../public/lexforge-mark.png" alt="" draggable="false" />
+          <span class="chat-unread-dot" id="chat-unread-dot" hidden aria-label="Có phản hồi AI chưa đọc"></span>
           <span class="launcher-state" id="launcher-state" aria-hidden="true"></span>
         </button>
       </div>
@@ -36,6 +38,8 @@
           </div>
         </header>
 
+        <nav class="chat-mode-switch" aria-label="Chức năng trợ lý"><button id="chat-tools-mode" type="button" aria-pressed="true">Công cụ tiếng Anh</button><button id="chat-ai-mode" type="button" aria-pressed="false">Trợ lý AI <span id="chat-tab-dot" hidden>●</span></button></nav>
+        <section id="chat-host" hidden aria-label="Hội thoại AI"><iframe id="chat-frame" title="Trợ lý AI" allow="microphone" hidden></iframe></section>
         <div class="panel-content">
           <section class="status-card" id="status-card">
             <div class="status-main">
@@ -150,5 +154,6 @@
       </section>
     </main>
     <script src="assistant-widget.js"></script>
+    <script src="assistant-chat-host.js"></script>
   </body>
 </html>

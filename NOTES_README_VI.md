@@ -34,7 +34,7 @@ Khi thư mục/ổ đĩa mất kết nối, app hiện cảnh báo và không t�
 ## Giọng nói và AI
 
 Micro trong trình sửa chỉ điền nội dung local. Micro ở ô yêu cầu (Ctrl+Shift+M)
-chỉ điền yêu cầu, không tự gửi. Silero tự dừng sau khoảng 1,8 giây im lặng và Whisper
+chỉ điền yêu cầu, không tự gửi. Silero tự dừng sau khoảng 1,5 giây im lặng và Whisper
 nhận dạng trên máy. Bấm **Gửi AI** mới gửi yêu cầu, note đang chọn và tối đa 20 tin
 gần đây của note đó tới Groq, dùng API key trong Cài đặt.
 
@@ -69,3 +69,21 @@ Tên TXT dùng tối đa 8 từ đầu của nội dung (tối đa 60 ký tự),
 Trợ lý mặc định trả lời bằng văn xuôi ngắn, tự nhiên, không tiêu đề Markdown, dấu in đậm, emoji hoặc danh sách theo khuôn. Vẫn dùng checklist, mã nguồn hay định dạng khác nếu người dùng yêu cầu rõ; không tự lọc ký hiệu khỏi văn bản gốc.
 
 Giao diện chat mở rộng vùng đọc; thông tin xử lý dữ liệu nằm trong Tùy chọn. Ô nhập trống: Enter gửi, Shift+Enter xuống dòng; Enter trong lúc IME đang ghép chữ không gửi. Giữ nút micro và nút gửi để thao tác bằng chuột.
+
+## Hội thoại trong bong bóng nổi
+
+- Chọn **Trợ lý AI** trong bảng bong bóng. Các công cụ tiếng Anh và hai popup dịch/viết giữ nguyên luồng cũ.
+- **Ctrl+Alt+A** mở thẳng chat. Nếu phím bị chiếm, ứng dụng thử **Ctrl+Shift+Space**; phím thực tế hiện ở tooltip tab Trợ lý AI. Không đăng ký được cả hai thì chat hiện thông báo.
+- Hàng trên cùng: tên hội thoại để chọn cuộc chat, **+** tạo mới, **…** để xóa (có xác nhận). Hội thoại đang chờ phản hồi chưa thể xóa. Xóa chat không xóa note.
+- Hội thoại, lựa chọn hiện tại, bản nháp và trạng thái chưa đọc dùng chung giữa workspace và bong bóng; lưu local trong `assistant-conversations.json` tại userData của Electron. Không phụ thuộc thư mục TXT của note. Lịch sử chat cũ được nhập một lần, chỉ bỏ bản localStorage khi nhập thành công.
+- Phản hồi vẫn xử lý sau khi thu bong bóng. Chấm đỏ báo còn phản hồi chưa đọc; mở xem một hội thoại chỉ đánh dấu đã đọc cho hội thoại đó.
+- Từng hội thoại xử lý yêu cầu riêng: có thể chuyển sang cuộc chat khác trong lúc chờ. Cần chờ phản hồi hiện tại xong trước khi gửi tiếp trong cùng cuộc chat.
+- Enter gửi; Shift+Enter xuống dòng. Ctrl+Shift+M điều khiển micro trong khung chat đang mở. Micro dùng lại nhận dạng và VAD local; chỉ văn bản/ngữ cảnh được gửi tới Groq khi người dùng gửi yêu cầu.
+
+Kiểm tra tích hợp: chạy frontend bằng `npm start`, sau đó `npm run test:chat-ui`. Bài kiểm tra dùng hồ sơ Electron tạm và phản hồi AI giả lập, không đọc ghi chú hay dùng API key thật của người dùng.
+
+## Nghe tin nhắn
+
+Mỗi tin của bạn và trợ lý có nút loa: bấm để nghe, bấm lại để dừng. Menu **… → Tự đọc phản hồi** bật/tắt đọc phản hồi AI mới khi đang mở hội thoại; mặc định tắt và dùng chung cho workspace/bong bóng. Không đọc lại lịch sử khi mở chat, không phát đồng thời từ cả hai cửa sổ. Đổi hội thoại, thu chat hoặc bật micro sẽ dừng đọc.
+
+Giọng đọc mới chỉ dùng giọng Windows `localService` cho tiếng Việt/Anh, không gửi văn bản tới dịch vụ TTS bên ngoài. Nếu chưa có giọng local phù hợp, ứng dụng báo để cài giọng trong Windows thay vì chuyển sang giọng online.

@@ -17,7 +17,8 @@
     "dist:win": "npm run build && npm run build:selection-monitor && electron-builder --win",
     "prestart": "node scripts/prepare-vad.cjs",
     "prebuild": "node scripts/prepare-vad.cjs",
-    "test": "react-scripts test"
+    "test": "react-scripts test",
+    "test:chat-ui": "node scripts/test-floating-chat.cjs"
   },
   "build": {
     "appId": "com.toeic.vocabmaster",
@@ -54,6 +55,9 @@
       "package.json",
       "electron/notes-store.cjs",
       "electron/notes-assistant.cjs",
+      "electron/conversations.cjs",
+      "electron/assistant-chat-host.js",
+      "electron/assistant-chat-host.css",
       "electron/notes-storage.cjs",
       "electron/notes-text-store.cjs"
     ],

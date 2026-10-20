@@ -1,7 +1,7 @@
 import type { MicVAD } from '@ricky0123/vad-web';
 
 export const SILENCE_VAD_OPTIONS = {
-  redemptionMs: 1800,
+  redemptionMs: 1500,
   minSpeechMs: 400,
   submitUserSpeechOnPause: false,
 };

@@ -17,15 +17,15 @@ async function detector() {
   };
 }
 
-test('waits for speech and ends after approximately 1.8 seconds of silence', async () => {
-  expect(SILENCE_VAD_OPTIONS.redemptionMs).toBe(1800);
+test('waits for speech and ends after approximately 1.5 seconds of silence', async () => {
+  expect(SILENCE_VAD_OPTIONS.redemptionMs).toBe(1500);
   const vad = await detector();
   await vad.feed(false, 100);
   expect(vad.endings()).toBe(0);
   await vad.feed(true, 20);
-  await vad.feed(false, 54);
+  await vad.feed(false, 45);
   expect(vad.endings()).toBe(0);
-  await vad.feed(false, 3);
+  await vad.feed(false, 2);
   expect(vad.endings()).toBe(1);
 });
 
@@ -36,6 +36,6 @@ test('a short thinking pause resets when speech resumes', async () => {
   await vad.feed(true, 20);
   await vad.feed(false, 40);
   expect(vad.endings()).toBe(0);
-  await vad.feed(false, 17);
+  await vad.feed(false, 7);
   expect(vad.endings()).toBe(1);
 });

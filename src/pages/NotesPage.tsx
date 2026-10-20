@@ -1,30 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { BookOpen, Plus, Search, Trash2, RotateCcw, Download, Save, Mic, Square, Send, Sparkles, ShieldCheck, FileText, Undo2, FolderOpen, Settings, User } from 'lucide-react';
-import { LocalNote, NoteMessage, NotesStorageStatus, notesRequest, exportNote } from '../services/notes';
+import { BookOpen, Plus, Search, Trash2, RotateCcw, Download, Save, Mic, Square, ShieldCheck, FileText, Undo2, FolderOpen, Settings } from 'lucide-react';
+import { LocalNote, NotesStorageStatus, notesRequest, exportNote } from '../services/notes';
 import { useLocalDictation } from '../hooks/useLocalDictation';
-import { registerMicrophoneShortcut } from '../services/microphoneShortcut';
+import AssistantChat from '../components/AssistantChat';
 import { notify } from '../components/Feedback/ToastHost';
 import './NotesPage.css';
 
 type Form = {title: string; content: string};
-const chatKey = 'lexforge-assistant-conversation-v1';
 const draftKey = (id: string) => `lexforge-note-draft-${id}`;
 export default function NotesPage() {
   const [notes, setNotes] = useState<LocalNote[]>([]);
   const [selected, setSelected] = useState<LocalNote | null>(null);
   const [form, setForm] = useState<Form>({title:'',content:''});
-  const [messages, setMessages] = useState<NoteMessage[]>(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(chatKey) || '[]');
-      return Array.isArray(saved) ? saved.filter(message => message && ['user','assistant'].includes(message.role) && typeof message.content === 'string' && message.content.length <= 212200).slice(-40) : [];
-    } catch { return []; }
-  });
-  const [attachNote, setAttachNote] = useState(false);
-  const messageEnd = useRef<HTMLDivElement>(null);
-  const promptInput = useRef<HTMLTextAreaElement>(null);
   const operationRunning = useRef(false);
-  const restorePromptFocus = useRef(false);
-  const [prompt, setPrompt] = useState('');
   const [search, setSearch] = useState('');
   const [trash, setTrash] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -36,12 +24,11 @@ export default function NotesPage() {
   const [visibleCount, setVisibleCount] = useState(15);
   const [dictationTarget, setDictationTarget] = useState<'note'|'prompt'>('prompt');
   const target = useRef<'note'|'prompt'>('prompt');
-  const promptMic = useRef<HTMLButtonElement>(null);
   const alive = useRef(true);
   const dirty = !!selected && (form.title !== selected.title || form.content !== selected.content);
   const dictation = useLocalDictation(text => {
     if (target.current === 'note') setForm(previous => ({...previous, content:[previous.content,text].filter(Boolean).join('\n')}));
-    else setPrompt(previous => [previous,text].filter(Boolean).join(' '));
+
   }, 'auto');
   const recordingBusy = dictation.isListening || dictation.isTranscribing;
   const locked = busy || recordingBusy;
@@ -89,13 +76,6 @@ export default function NotesPage() {
       else localStorage.removeItem(draftKey(selected.id));
     } catch { setError('Không lưu được bản nháp. Hãy bấm Lưu để ghi ra file TXT.'); }
   }, [selected?.id, form.title, form.content, dirty]);
-  useEffect(() => {if(!selected||selected.deleted)setAttachNote(false);}, [selected?.id,selected?.deleted]);
-  useEffect(() => {
-    try {localStorage.setItem(chatKey, JSON.stringify(messages));}
-    catch {setError('Không lưu được hội thoại trên máy. Nội dung vẫn còn trong phiên này.');}
-    messageEnd.current?.scrollIntoView({block:'nearest'});
-  }, [messages]);
-  useEffect(() => registerMicrophoneShortcut(() => promptMic.current?.click()), []);
   useEffect(() => {
     const onKey = (event:KeyboardEvent) => {
       if (event.ctrlKey && event.key.toLowerCase()==='s') {event.preventDefault(); if(!locked && dirty) void run(save);}
@@ -153,24 +133,6 @@ export default function NotesPage() {
     if(last)await loadNote(last);
     notify('Đã áp dụng thư mục lưu. Toàn bộ ghi chú được giữ lại.','success');
   });
-  useEffect(() => {
-    if(!locked&&restorePromptFocus.current){restorePromptFocus.current=false;promptInput.current?.focus();}
-  }, [locked]);
-  const sendAI = () => void run(async()=>{
-    if(!prompt.trim())return;
-    restorePromptFocus.current=true;
-    const current=attachNote ? await save() : null;
-    if(attachNote && (!current || current.deleted))throw new Error('Hãy chọn một ghi chú đang hoạt động để đính kèm.');
-    const request=prompt.trim();
-    const history=messages.slice(-12).map(({role,content})=>({role,content:content.slice(0,12000)}));
-    const result=await notesRequest<{note:LocalNote|null;reply:string;action:string;warning:string}>('assist',{noteId:current?.id,prompt:request,history});
-    const now=Date.now();
-    setMessages(previous=>[...previous,{id:now,noteId:'',role:'user' as const,content:request,createdAt:new Date().toISOString()},{id:now+1,noteId:'',role:'assistant' as const,content:result.reply,createdAt:new Date().toISOString()}].slice(-40));
-    setPrompt('');
-    if(result.note && result.action!=='answer'){setSearch('');setVisibleCount(15);setTrash(false);await refresh(false);await loadNote(result.note);}
-    if(result.warning)notify(result.warning,'error');
-    else if(result.action!=='answer')notify(result.action==='create'?'Đã tạo và lưu note.':'Đã cập nhật và lưu note.','success');
-  });
   const toggleMicrophone = (where:'note'|'prompt') => {
     if(busy||dictation.isTranscribing)return;
     if(dictation.isListening){dictation.stop();return;}
@@ -212,15 +174,7 @@ export default function NotesPage() {
         <label className="lf-notes-content-label"><span>Nội dung ghi chú · văn bản TXT</span><textarea value={form.content} maxLength={200000} readOnly={locked||!!selected.deleted} onChange={event=>setForm({...form,content:event.target.value})} placeholder="Viết tự do, ghi bằng giọng nói hoặc nhờ trợ lý sắp xếp ý tưởng…"/></label>
         {!selected.deleted&&<footer className="lf-notes-editor-footer"><button disabled={busy||dictation.isTranscribing} className={dictation.isListening&&dictationTarget==='note'?'recording':''} onClick={()=>toggleMicrophone('note')}>{dictation.isListening&&dictationTarget==='note'?<Square size={16}/>:<Mic size={16}/>} {microphoneLabel('note')}</button><button disabled={locked||!storage?.valid} onClick={saveAsNew} title="Tạo note riêng từ nội dung hiện tại"><Plus size={16}/> Lưu thành ghi chú mới</button><button className="lf-notes-primary" aria-label="Lưu ghi chú hiện tại" disabled={locked||!dirty||!storage?.valid} onClick={()=>void run(save)}><Save size={16}/> Lưu <kbd>Ctrl S</kbd></button></footer>}</>:<div className="lf-notes-editor-empty"><div><FileText size={32}/></div><h2>Chỗ cho ý tưởng tiếp theo</h2><p>Tạo một ghi chú, hoặc yêu cầu trợ lý tạo giúp bạn. Nội dung được lưu trên máy của bạn.</p><button className="lf-notes-primary" disabled={locked||loading||!storage?.valid} onClick={create}><Plus size={16}/> Tạo ghi chú</button></div>}
       </section>
-      <section className="lf-notes-assistant" aria-label="Trợ lý AI">
-        <header><span className="lf-notes-ai-icon"><Sparkles size={20}/></span><div><strong>Trợ lý AI</strong>{attachNote&&selected&&<small>{`Đính kèm: ${selected.title}`}</small>}</div><button className="lf-notes-new-chat" disabled={locked||!messages.length} onClick={()=>{setMessages([]);setAttachNote(false);}} title="Xóa hội thoại hiện tại để bắt đầu mới" aria-label="Hội thoại mới"><Plus size={18}/></button></header>
-        <div className="lf-notes-messages" aria-live="polite">{messages.length?messages.map(message=><div key={message.id} className={`lf-notes-message ${message.role}`}><div className="lf-notes-message-author"><span className="lf-notes-message-avatar" aria-hidden="true">{message.role==='user'?<User size={16}/>:<Sparkles size={16}/>}</span><strong>{message.role==='user'?'Bạn':'Trợ lý AI'}</strong></div><p>{message.content}</p></div>):<div className="lf-notes-ai-empty"><h3>Bạn cần tôi giúp gì?</h3></div>}{busy&&<p className="lf-notes-working" role="status">Đang xử lý…</p>}<div ref={messageEnd}/></div>
-        <div className="lf-notes-prompt"><label className="lf-notes-attach"><input type="checkbox" checked={attachNote} disabled={locked||!selected||!!selected.deleted||!storage?.valid} onChange={event=>setAttachNote(event.target.checked)}/> Đính kèm note đang chọn</label><textarea ref={promptInput} id="notes-prompt" aria-label="Nhập yêu cầu cho trợ lý" title="Enter để gửi · Shift+Enter để xuống dòng" value={prompt} maxLength={40000} disabled={locked} onChange={event=>setPrompt(event.target.value)} onKeyDown={event=>{
-          if(event.key!=='Enter'||event.shiftKey||event.ctrlKey||event.altKey||event.metaKey||event.nativeEvent.isComposing||event.nativeEvent.keyCode===229)return;
-          event.preventDefault();
-          if(!event.repeat&&!locked&&prompt.trim())sendAI();
-        }}/><div><button ref={promptMic} aria-keyshortcuts="Control+Shift+M" disabled={busy||dictation.isTranscribing} onClick={()=>toggleMicrophone('prompt')} title="Ctrl + Shift + M" aria-label={microphoneLabel('prompt')} className={dictation.isListening&&dictationTarget==='prompt'?'recording':''}>{dictation.isListening&&dictationTarget==='prompt'?<Square size={17}/>:<Mic size={17}/>}</button><button className="lf-notes-primary" disabled={locked||!prompt.trim()} onClick={sendAI}><Send size={16}/> Gửi AI</button></div></div>
-      </section>
+      <div className="lf-notes-assistant"><AssistantChat note={selected} saveNote={save} onNoteSaved={()=>{void refresh(false);}}/></div>
     </div>
   </div>;
 }

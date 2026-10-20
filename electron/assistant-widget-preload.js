@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('assistantAPI', {
+  chatRequest: (operation,args) => ipcRenderer.invoke('assistant:chat',operation,args),
+  onChatChange: callback => { const listener=(_event,state)=>callback(state); ipcRenderer.on('assistant:chat-changed',listener); return ()=>ipcRenderer.removeListener('assistant:chat-changed',listener); },
+  onOpenChat: callback => { const listener=()=>callback(); ipcRenderer.on('assistant:open-chat',listener); return ()=>ipcRenderer.removeListener('assistant:open-chat',listener); },
   getState: () => ipcRenderer.invoke('assistant:get-state'),
   getTheme: () => ipcRenderer.invoke('assistant:get-theme'),
   setTheme: (theme) => ipcRenderer.invoke('assistant:set-theme', theme),
