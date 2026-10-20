@@ -2237,6 +2237,11 @@ ipcMain.handle('assistant:chat', async (event, operation, args = {}) => {
       case 'read': data = conversations.read(args.id,args.lastId); break;
       case 'remove': data = conversations.remove(args.id); break;
       case 'migrate': data = conversations.migrate(args.messages); break;
+      case 'correctEnglish': {
+        const key = db.exec('SELECT SettingValue FROM UserSettings WHERE SettingKey = ?', ['groq_api_key'])[0]?.values?.[0]?.[0];
+        data = await require('./english-correction.cjs').correctEnglish(args.text, key);
+        break;
+      }
       case 'send': data = await conversations.send(args.id,args.prompt,args.noteId); break;
       default: throw Error('Unknown chat operation');
     }

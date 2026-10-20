@@ -63,7 +63,8 @@
       "electron/assistant-chat-host.css",
       "electron/notes-storage.cjs",
       "electron/notes-text-store.cjs",
-      "electron/local-speech.cjs"
+      "electron/local-speech.cjs",
+      "electron/english-correction.cjs"
     ],
     "extraResources": [
       {
