@@ -3,6 +3,7 @@ import { notify } from '../components/Feedback/ToastHost';
 import { db } from '../services/database';
 import { speechService } from '../services/speech';
 import { startLocalVad } from '../services/localVad';
+import { registerMicrophoneShortcut } from '../services/microphoneShortcut';
 import { Word, WordGroup } from '../types';
 import './AICoachApproved.css';
 
@@ -88,6 +89,7 @@ export default function AICoachPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const microphoneButtonRef = useRef<HTMLButtonElement>(null);
   const recognitionRef = useRef<any>(null);
   useEffect(() => () => recognitionRef.current?.cancel?.(), []);
 
@@ -688,6 +690,11 @@ export default function AICoachPage() {
     }
   };
 
+  useEffect(() => {
+    if (!sessionStarted) return;
+    return registerMicrophoneShortcut(() => microphoneButtonRef.current?.click());
+  }, [sessionStarted]);
+
   // ─── Setup screen ─────────────────────────────────────────────────────────────
   if (!sessionStarted) return (
     <div className="lf-ai-approved">
@@ -921,7 +928,7 @@ export default function AICoachPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {mode === 'speaking' && <p style={{ padding: '0 24px', fontSize: 12, color: 'var(--text-muted)' }}>Tự dừng sau khoảng 1,8 giây im lặng khi đã nói. Ghi âm được nhận dạng trên máy. Chỉ văn bản được gửi tới Groq khi bạn bấm gửi.</p>}
+      {mode === 'speaking' && <p style={{ padding: '0 24px', fontSize: 12, color: 'var(--text-muted)' }}>Ctrl + Shift + M: bật/dừng micro. Tự dừng sau khoảng 1,8 giây im lặng khi đã nói. Ghi âm được nhận dạng trên máy. Chỉ văn bản được gửi tới Groq khi bạn bấm gửi.</p>}
 
       {/* Suggested prompts */}
       {messages.length <= 2 && (
@@ -1096,8 +1103,8 @@ export default function AICoachPage() {
             onFocus={e => e.currentTarget.style.borderColor = 'var(--accent)'}
             onBlur={e => e.currentTarget.style.borderColor = 'var(--border)'}
           />
-          <button disabled={isTranscribing} aria-label={isTranscribing ? 'Đang nhận dạng trên máy' : isListening ? 'Dừng ghi âm' : 'Ghi âm trên máy'} onClick={isListening ? stopListening : startListening}
-            title="Nói để nhập văn bản"
+          <button ref={microphoneButtonRef} aria-keyshortcuts="Control+Shift+M" disabled={isTranscribing} aria-label={isTranscribing ? 'Đang nhận dạng trên máy' : isListening ? 'Dừng ghi âm' : 'Ghi âm trên máy'} onClick={isListening ? stopListening : startListening}
+            title="Bật/dừng micro (Ctrl + Shift + M)"
             style={{
               width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
               border: `2px solid ${isListening ? '#ef4444' : 'var(--border)'}`,
@@ -1120,7 +1127,7 @@ export default function AICoachPage() {
           </button>
         </div>
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>Enter gửi • Shift+Enter xuống dòng • 🎤 để nói</span>
+          <span>Enter gửi • Shift+Enter xuống dòng • Ctrl+Shift+M bật/dừng micro</span>
           {isCheckingGrammar && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--accent-bright)' }}>
               <span className="spinner-small" style={{
