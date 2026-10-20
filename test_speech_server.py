@@ -5,7 +5,7 @@ from speech_server import create_app
 class LocalSpeechTests(unittest.TestCase):
     def setUp(self):
         self.received = []
-        def transcribe(audio):
+        def transcribe(audio, language="en"):
             self.received.append(audio.read())
             return 'Hello, I am practicing English.'
         self.client = create_app(transcribe).test_client()
@@ -22,13 +22,13 @@ class LocalSpeechTests(unittest.TestCase):
         self.assertEqual(self.received, [])
 
     def test_silence_has_no_speech_error(self):
-        client = create_app(lambda audio: '').test_client()
+        client = create_app(lambda audio, language: '').test_client()
         response = client.post('/transcribe-blob', data={'audioBlob': (io.BytesIO(b'audio'), 'audio.webm')})
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json['errorCode'], 'no-speech')
 
     def test_transcriber_failure_does_not_leak_details(self):
-        def fail(audio):
+        def fail(audio, language):
             raise RuntimeError('private recording details')
         client = create_app(fail).test_client()
         response = client.post('/transcribe-blob', data={'audioBlob': (io.BytesIO(b'audio'), 'audio.webm')})
@@ -39,6 +39,16 @@ class LocalSpeechTests(unittest.TestCase):
         response = self.client.post('/transcribe-blob', data=b'x' * (8 * 1024 * 1024 + 1), content_type='multipart/form-data; boundary=test')
         self.assertEqual(response.status_code, 413)
         self.assertEqual(self.received, [])
+
+    def test_auto_language_uses_local_detection_and_invalid_values_are_rejected(self):
+        languages = []
+        client = create_app(lambda audio, language: languages.append(language) or 'Xin chào').test_client()
+        response = client.post('/transcribe-blob', data={'language': 'auto', 'audioBlob': (io.BytesIO(b'audio'), 'audio.webm')})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(languages, [None])
+        invalid = client.post('/transcribe-blob', data={'language': 'remote', 'audioBlob': (io.BytesIO(b'audio'), 'audio.webm')})
+        self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(languages, [None])
 
     def test_health_identifies_local_processing(self):
         self.assertEqual(self.client.get('/health').json['processing'], 'local')

@@ -51,7 +51,11 @@
       "electron/writing-popup-preload.js",
       "public/lexforge-mark.png",
       "public/icon.ico",
-      "package.json"
+      "package.json",
+      "electron/notes-store.cjs",
+      "electron/notes-assistant.cjs",
+      "electron/notes-storage.cjs",
+      "electron/notes-text-store.cjs"
     ],
     "extraResources": [
       {

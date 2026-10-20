@@ -1,11 +1,11 @@
 import React from 'react';
-import { LayoutDashboard, CalendarDays, BookOpen, FolderOpen, Layers, Bot, Headphones, Keyboard, Swords, Skull, Grid2X2, Users, BarChart3, Settings, HelpCircle, Sparkles } from 'lucide-react';
+import { LayoutDashboard, CalendarDays, BookOpen, FolderOpen, Layers, Bot, Headphones, Keyboard, Swords, Skull, Grid2X2, Users, BarChart3, Settings, HelpCircle, Sparkles, FileText } from 'lucide-react';
 import { useApp } from '../../App';
 import { Page } from '../../types';
 import { notify } from '../Feedback/ToastHost';
 
 const sections: { title: string; items: { id: Page; label: string; icon: typeof LayoutDashboard }[] }[] = [
-  { title: 'Hôm nay', items: [{ id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard }, { id: 'schedule', label: 'Lịch ôn tập AI', icon: CalendarDays }] },
+  { title: 'Hôm nay', items: [{ id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard }, { id: 'notes', label: 'Ghi chú & trợ lý', icon: FileText }, { id: 'schedule', label: 'Lịch ôn tập AI', icon: CalendarDays }] },
   { title: 'Từ vựng', items: [{ id: 'vocabulary', label: 'Từ vựng', icon: BookOpen }, { id: 'groups', label: 'Nhóm từ', icon: FolderOpen }] },
   { title: 'Luyện tập', items: [{ id: 'flashcard', label: 'Flashcard', icon: Layers }, { id: 'quiz', label: 'Trắc nghiệm', icon: BookOpen }, { id: 'ai-coach', label: 'AI Coach', icon: Bot }, { id: 'mp4-listening', label: 'Học nghe MP3', icon: Headphones }] },
   { title: 'Trò chơi', items: [{ id: 'typing-game', label: 'Gõ chữ tốc độ', icon: Keyboard }, { id: 'monster-game', label: 'Đánh quái', icon: Swords }, { id: 'zombie-game', label: 'Zombie Survival', icon: Skull }, { id: 'memory-flip', label: 'Memory Flip', icon: Grid2X2 }, { id: 'multiplayer', label: 'Multiplayer', icon: Users }] },

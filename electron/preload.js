@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  notesRequest: (operation, args) => ipcRenderer.invoke('notes:request', operation, args),
   dbConnect: (config) => ipcRenderer.invoke('db-connect', config),
   dbQuery:   (query, params) => ipcRenderer.invoke('db-query', query, params),
   dbStatus:  () => ipcRenderer.invoke('db-status'),

@@ -1,6 +1,6 @@
 # Local speech recognition
 
-Audio is processed by faster-whisper small.en on this computer (CPU int8).
+Audio is processed by faster-whisper small (multilingual) on this computer (CPU int8).
 There is no Google/Groq audio API, cloud fallback, recording file, or transcript log.
 The server binds only to 127.0.0.1:5000. Uploads stay in memory (maximum 8 MB).
 In Speaking mode, automatic Groq grammar checks are disabled. Pressing Send still
@@ -14,7 +14,7 @@ python -m venv .venv
 .venv\Scripts\python.exe setup_speech_model.py
 ```
 
-Only the setup step downloads model files from Hugging Face into models/small.en.
+Only the setup step downloads model files from Hugging Face into models/small.
 The recognition server loads local files only, with Hugging Face offline mode enabled.
 No API key, billing account, or CUDA installation is required for speech recognition.
 
@@ -40,3 +40,6 @@ npx tsc --noEmit
 VAD assets are copied from npm dependencies into public/vad by prestart/prebuild.
 They are served locally, without CDN requests. Run npm test -- --watchAll=false --runInBand
 for the silence timing tests.
+
+Notes request automatic language detection. AI Coach requests English; when an existing
+models/small.en is present it remains the English recognizer. All models load locally.

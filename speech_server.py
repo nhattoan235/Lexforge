@@ -7,7 +7,7 @@ from flask import Flask, Request, jsonify, request
 from flask_cors import CORS
 from werkzeug.exceptions import RequestEntityTooLarge
 
-MODEL_PATH = Path(__file__).resolve().parent / "models" / "small.en"
+MODEL_PATH = Path(__file__).resolve().parent / "models" / "small"
 
 class MemoryRequest(Request):
     # Flask normally spools larger uploads to disk; keep microphone audio in RAM.
@@ -19,10 +19,18 @@ def load_transcriber():
     os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
     from faster_whisper import WhisperModel
     model = WhisperModel(str(MODEL_PATH), device="cpu", compute_type="int8", local_files_only=True)
+    english_model = None
+    english_path = MODEL_PATH.parent / "small.en"
     lock = threading.Lock()
-    def transcribe(audio):
+    def transcribe(audio, language="en"):
+        nonlocal english_model
         with lock:
-            segments, _ = model.transcribe(audio, language="en", beam_size=1, vad_filter=True,
+            selected = model
+            if language == "en" and english_path.is_dir():
+                if english_model is None:
+                    english_model = WhisperModel(str(english_path), device="cpu", compute_type="int8", local_files_only=True)
+                selected = english_model
+            segments, _ = selected.transcribe(audio, language=language, beam_size=1, vad_filter=True,
                                            condition_on_previous_text=False)
             return " ".join(segment.text.strip() for segment in segments).strip()
     return transcribe
@@ -35,7 +43,7 @@ def create_app(transcribe):
 
     @app.get("/health")
     def health():
-        return jsonify(status="ok", service="faster-whisper", processing="local", model="small.en", ready=True)
+        return jsonify(status="ok", service="faster-whisper", processing="local", model="small", ready=True)
 
     @app.errorhandler(RequestEntityTooLarge)
     def too_large(error):
@@ -49,7 +57,10 @@ def create_app(transcribe):
             if not audio.getbuffer().nbytes:
                 return jsonify(success=False, error="Empty audio.", errorCode="invalid-audio"), 400
             try:
-                text = transcribe(audio)
+                language = request.form.get("language", "en")
+                if language not in ("en", "vi", "auto"):
+                    return jsonify(success=False, error="Unsupported language.", errorCode="invalid-language"), 400
+                text = transcribe(audio, None if language == "auto" else language)
             except Exception:
                 # Do not log recordings or transcripts, including decoder error details.
                 return jsonify(success=False, error="Cannot decode or recognize audio locally.", errorCode="transcription-error"), 500
@@ -59,7 +70,7 @@ def create_app(transcribe):
     return app
 
 if __name__ == "__main__":
-    print("Loading local small.en model (CPU int8)...", flush=True)
+    print("Loading local multilingual small model (CPU int8)...", flush=True)
     try:
         transcribe = load_transcriber()
     except Exception:

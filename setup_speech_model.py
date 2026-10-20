@@ -10,7 +10,7 @@ os.environ["HF_HUB_DISABLE_XET"] = "1"
 from huggingface_hub import snapshot_download
 
 if __name__ == "__main__":
-    destination = Path(__file__).resolve().parent / "models" / "small.en"
-    snapshot_download("Systran/faster-whisper-small.en", local_dir=str(destination),
+    destination = Path(__file__).resolve().parent / "models" / "small"
+    snapshot_download("Systran/faster-whisper-small", local_dir=str(destination),
                       allow_patterns=["config.json", "model.bin", "tokenizer.json", "vocabulary.*", "preprocessor_config.json"])
     print(f"Local model downloaded: {destination}")

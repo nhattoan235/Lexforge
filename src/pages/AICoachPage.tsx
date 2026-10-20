@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { notify } from '../components/Feedback/ToastHost';
 import { db } from '../services/database';
 import { speechService } from '../services/speech';
-import { startLocalVad } from '../services/localVad';
+import { useLocalDictation } from '../hooks/useLocalDictation';
 import { registerMicrophoneShortcut } from '../services/microphoneShortcut';
 import { Word, WordGroup } from '../types';
 import './AICoachApproved.css';
@@ -83,15 +83,12 @@ export default function AICoachPage() {
   const [autoSpeak, setAutoSpeak] = useState(true);
   const [sessionStarted, setSessionStarted] = useState(false);
   const [msgIdCounter, setMsgIdCounter] = useState(0);
-  const [isListening, setIsListening] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
+  const { isListening, isTranscribing, start: startListening, stop: stopListening } = useLocalDictation(setInput, 'en');
   const [apiKey, setApiKey] = useState('');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const microphoneButtonRef = useRef<HTMLButtonElement>(null);
-  const recognitionRef = useRef<any>(null);
-  useEffect(() => () => recognitionRef.current?.cancel?.(), []);
 
   // Translation & Selection tooltip state
   const [selectionText, setSelectionText] = useState('');
@@ -591,103 +588,6 @@ export default function AICoachPage() {
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-  };
-
-  const startListening = async () => {
-    if (isListening || isTranscribing) return;
-    let cancelled = false;
-    let stream: MediaStream | undefined;
-    let recorder: MediaRecorder | undefined;
-    let vad: Awaited<ReturnType<typeof startLocalVad>> | undefined;
-    let recordTimeout: ReturnType<typeof setTimeout> | undefined;
-    const uploadController = new AbortController();
-    const releaseMicrophone = () => {
-      clearTimeout(recordTimeout);
-      stream?.getTracks().forEach(track => track.stop());
-      if (vad) {
-        const detector = vad;
-        vad = undefined;
-        void detector.destroy().catch(() => {});
-      }
-    };
-    const stopRecording = () => {
-      clearTimeout(recordTimeout);
-      if (recorder?.state === 'recording') recorder.stop();
-      else {
-        cancelled = true;
-        releaseMicrophone();
-        setIsListening(false);
-      }
-    };
-    recognitionRef.current = {
-      stop: stopRecording,
-      cancel: () => {
-        cancelled = true;
-        uploadController.abort();
-        if (recorder?.state === 'recording') recorder.stop();
-        releaseMicrophone();
-      },
-    };
-    setIsListening(true);
-    speechService.stop();
-    setIsSpeaking(false);
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
-      if (cancelled) { releaseMicrophone(); return; }
-      const mediaRecorder = new MediaRecorder(stream);
-      recorder = mediaRecorder;
-      const audioChunks: Blob[] = [];
-      mediaRecorder.ondataavailable = event => { audioChunks.push(event.data); };
-      mediaRecorder.onstop = async () => {
-        releaseMicrophone();
-        if (cancelled) return;
-        const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
-        audioChunks.length = 0;
-        setIsListening(false);
-        setIsTranscribing(true);
-        try {
-          const formData = new FormData();
-          formData.append('audioBlob', audioBlob, mediaRecorder.mimeType.includes('ogg') ? 'audio.ogg' : 'audio.webm');
-          const response = await fetch('http://127.0.0.1:5000/transcribe-blob', {
-            method: 'POST', body: formData, signal: uploadController.signal,
-          });
-          const result = await response.json();
-          if (result.success) setInput(result.text);
-          else notify(result.errorCode === 'no-speech'
-            ? 'Không nghe thấy giọng nói. Hãy nói to hơn và thử lại.'
-            : result.error || 'Không nhận dạng được âm thanh.', 'error', 8000);
-        } catch (error) {
-          if (!cancelled) notify('Chưa kết nối được nhận dạng cục bộ. Hãy chạy start_speech_server.bat.', 'error', 8000);
-        } finally {
-          if (!cancelled) {
-            setIsListening(false);
-            setIsTranscribing(false);
-            recognitionRef.current = null;
-          }
-        }
-      };
-      // Silero runs locally and ends only a valid speech segment after 1.8 s of silence.
-      vad = await startLocalVad(stream, stopRecording);
-      if (cancelled) { releaseMicrophone(); return; }
-      mediaRecorder.start();
-      recordTimeout = setTimeout(stopRecording, 30000);
-    } catch (error: any) {
-      releaseMicrophone();
-      if (cancelled) return;
-      setIsListening(false);
-      recognitionRef.current = null;
-      const message = error.name === 'NotAllowedError' ? 'Quyền micro bị từ chối. Hãy cho phép micro trong cài đặt.'
-        : error.name === 'NotFoundError' ? 'Không tìm thấy micro. Hãy kiểm tra thiết bị âm thanh.'
-        : 'Không khởi động được micro hoặc VAD cục bộ. Hãy thử lại.';
-      notify(message, 'error', 8000);
-    }
-  };
-
-  const stopListening = () => {
-    if (recognitionRef.current?.stop) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-    }
   };
 
   useEffect(() => {

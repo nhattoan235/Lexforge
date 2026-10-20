@@ -17,6 +17,7 @@ const GroupsPage = lazy(() => import('./pages/GroupsPage'));
 const VocabularyPage = lazy(() => import('./pages/VocabularyPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const HelpPage = lazy(() => import('./pages/HelpPage'));
+const NotesPage = lazy(() => import('./pages/NotesPage'));
 const AICoachPage = lazy(() => import('./pages/AICoachPage'));
 const SchedulePage = lazy(() => import('./pages/SchedulePage'));
 import './App.css';
@@ -126,6 +127,7 @@ function App() {
       case 'schedule':     return <SchedulePage />;
       case 'settings':     return <SettingsPage />;
       case 'help':         return <HelpPage />;
+      case 'notes':       return <NotesPage />;
       case 'ai-coach':     return <AICoachPage />;
       default:             return <Dashboard onInitialLoad={() => setDashboardReady(true)} />;
     }
@@ -135,7 +137,7 @@ function App() {
     <AppContext.Provider value={{ theme, setTheme, currentPage, setPage: setCurrentPage, isConnected, setConnected: setIsConnected, refreshTrigger, triggerRefresh }}>
       <div className="app">
         <Sidebar />
-        <main className={`main-content${['dashboard','vocabulary','groups','flashcard','schedule','progress','settings','help','ai-coach','mp4-listening','typing-game','monster-game','memory-flip','multiplayer'].includes(currentPage) ? ' lf-dashboard-main' : ''}`}><Suspense fallback={<div className="lf-page-loading" role="status">Đang mở trang…</div>}>{renderPage()}</Suspense></main>
+        <main className={`main-content${['dashboard','vocabulary','groups','flashcard','schedule','progress','settings','help','ai-coach','notes','mp4-listening','typing-game','monster-game','memory-flip','multiplayer'].includes(currentPage) ? ' lf-dashboard-main' : ''}`}><Suspense fallback={<div className="lf-page-loading" role="status">Đang mở trang…</div>}>{renderPage()}</Suspense></main>
       </div>
       <ToastHost />
     </AppContext.Provider>

@@ -1,4 +1,6 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, screen, clipboard, globalShortcut } = require('electron');
+const { createNotesStorage } = require('./notes-storage.cjs');
+const { assistNotes } = require('./notes-assistant.cjs');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, screen, clipboard, globalShortcut, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -1949,6 +1951,7 @@ const DB_PATH = path.join(userDataPath, 'vocab.db');
 
 let db = null;
 let SQL = null;
+let notesStorage = null;
 
 async function initDatabase() {
   SQL = await initSqlJs();
@@ -1964,6 +1967,22 @@ async function initDatabase() {
   createTables();
   migrateSchema();
   saveDb(); // Save initial state
+  notesStorage = createNotesStorage(SQL, {
+    defaultDirectory: userDataPath,
+    getDirectory: () => db.exec('SELECT SettingValue FROM UserSettings WHERE SettingKey = ?', ['notes_storage_directory'])[0]?.values?.[0]?.[0],
+    setDirectory: directory => {
+      const previous = db.exec('SELECT SettingValue FROM UserSettings WHERE SettingKey = ?', ['notes_storage_directory'])[0]?.values?.[0]?.[0];
+      db.run('INSERT OR REPLACE INTO UserSettings(SettingKey, SettingValue) VALUES(?, ?)', ['notes_storage_directory', directory]);
+      try {
+        fs.writeFileSync(DB_PATH + '.tmp', Buffer.from(db.export()));
+        fs.renameSync(DB_PATH + '.tmp', DB_PATH);
+      } catch (error) {
+        if (previous === undefined) db.run('DELETE FROM UserSettings WHERE SettingKey = ?', ['notes_storage_directory']);
+        else db.run('UPDATE UserSettings SET SettingValue = ? WHERE SettingKey = ?', [previous, 'notes_storage_directory']);
+        throw error;
+      }
+    },
+  });
   console.log('✅ sql.js DB initialized at:', DB_PATH);
 
   // Mutating IPC queries persist immediately; avoid exporting the whole DB every 30 seconds.
@@ -2131,4 +2150,38 @@ ipcMain.handle('db-query', (event, query, params = []) => {
     console.error('DB Error:', err.message, '\nQuery:', query.substring(0, 100));
     return { success: false, error: err.message };
   }
+});
+
+// The renderer can request named notes operations, never AI-generated SQL or file paths.
+ipcMain.handle('notes:request', async (event, operation, args = {}) => {
+  try {
+    if (event.sender !== mainWindow?.webContents) throw new Error('Notes are available only in the main window.');
+    if (!notesStorage) throw new Error('Notes database not ready. Restart Lexforge.');
+    if (!args || typeof args !== 'object' || Array.isArray(args)) throw new Error('Invalid notes request');
+    if (operation === 'storageStatus') return { success: true, data: notesStorage.status() };
+    if (operation === 'storageSet') return { success: true, data: notesStorage.changeDirectory(args.directory) };
+    if (operation === 'storageChoose') {
+      const chosen = await dialog.showOpenDialog(mainWindow, { title: 'Chọn thư mục lưu ghi chú', properties: ['openDirectory'] });
+      return { success: true, data: chosen.canceled ? null : chosen.filePaths[0] };
+    }
+    const notesStore = notesStorage.getStore();
+    let data;
+    switch (operation) {
+      case 'list': data = notesStore.list(args); break;
+      case 'get': data = notesStore.get(args.id); break;
+      case 'create': data = notesStore.create(args); break;
+      case 'update': data = notesStore.update(args); break;
+      case 'trash': data = notesStore.trash(args); break;
+      case 'restore': data = notesStore.restore(args); break;
+      case 'undo': data = notesStore.undo(args); break;
+      case 'messages': data = notesStore.messages(args.id); break;
+      case 'assist': {
+        const settings = db.exec('SELECT SettingValue FROM UserSettings WHERE SettingKey = ?', ['groq_api_key']);
+        data = await assistNotes(notesStore, args, settings[0]?.values?.[0]?.[0]);
+        break;
+      }
+      default: throw new Error('Unknown notes operation');
+    }
+    return { success: true, data };
+  } catch (error) { return { success: false, error: error.message }; }
 });
