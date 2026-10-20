@@ -26,3 +26,9 @@ electron/selection-monitor/publish/
 electron/selection-monitor-tests/bin/
 electron/selection-monitor-tests/obj/
 .nuget-home/
+
+.venv/
+models/
+__pycache__/
+
+public/vad/

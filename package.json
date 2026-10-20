@@ -14,7 +14,10 @@
     "electron-dev": "npm run build:selection-monitor:dev && concurrently \"cross-env BROWSER=none npm start\" \"wait-on --timeout 300000 --interval 1000 http://localhost:3000 && electron .\"",
     "pack": "npm run build && npm run build:selection-monitor && electron-builder --dir",
     "dist": "npm run build && npm run build:selection-monitor && electron-builder",
-    "dist:win": "npm run build && npm run build:selection-monitor && electron-builder --win"
+    "dist:win": "npm run build && npm run build:selection-monitor && electron-builder --win",
+    "prestart": "node scripts/prepare-vad.cjs",
+    "prebuild": "node scripts/prepare-vad.cjs",
+    "test": "react-scripts test"
   },
   "build": {
     "appId": "com.toeic.vocabmaster",
@@ -88,12 +91,13 @@
     "socket.io-client": "^4.7.2",
     "cross-env": "^7.0.3",
     "concurrently": "^8.2.2",
-    "electron": "^27.1.2",
+    "electron": "^44.9.1",
     "electron-builder": "^24.6.4",
     "wait-on": "^7.2.0",
     "@types/react": "^18.2.37",
     "@types/react-dom": "^18.2.15",
-    "typescript": "^4.9.5"
+    "typescript": "^4.9.5",
+    "@ricky0123/vad-web": "^0.0.31"
   },
   "browserslist": {
     "production": [

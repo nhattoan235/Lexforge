@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { notify } from '../components/Feedback/ToastHost';
 import { db } from '../services/database';
 import { speechService } from '../services/speech';
+import { startLocalVad } from '../services/localVad';
 import { Word, WordGroup } from '../types';
 import './AICoachApproved.css';
 
@@ -82,11 +83,13 @@ export default function AICoachPage() {
   const [sessionStarted, setSessionStarted] = useState(false);
   const [msgIdCounter, setMsgIdCounter] = useState(0);
   const [isListening, setIsListening] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [apiKey, setApiKey] = useState('');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
+  useEffect(() => () => recognitionRef.current?.cancel?.(), []);
 
   // Translation & Selection tooltip state
   const [selectionText, setSelectionText] = useState('');
@@ -147,7 +150,7 @@ export default function AICoachPage() {
     setGrammarResult(null);
     setGrammarError('');
     setIsCheckingGrammar(false);
-    if (!text || text.split(/\s+/).length < 2) {
+    if (mode === 'speaking' || !text || text.split(/\s+/).length < 2) {
       return;
     }
     const t = setTimeout(async () => {
@@ -193,7 +196,7 @@ export default function AICoachPage() {
       }
     }, 800);
     return () => { clearTimeout(t); controller.abort(); };
-  }, [input, apiKey, grammarRetry]);
+  }, [input, apiKey, grammarRetry, mode]);
 
   // Dismiss selection tooltip when clicking outside
   useEffect(() => {
@@ -589,88 +592,92 @@ export default function AICoachPage() {
   };
 
   const startListening = async () => {
-    try {
-      setIsListening(true);
-      console.log('🎤 Bắt đầu ghi âm...');
-
-      // Get access to microphone
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      const audioChunks: Blob[] = [];
-
-      mediaRecorder.ondataavailable = (event) => {
-        audioChunks.push(event.data);
-      };
-
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-        
-        // Stop all tracks
-        stream.getTracks().forEach(track => track.stop());
-        
-        console.log('📤 Gửi audio tới server...');
-        
-        try {
-          // Send to Python backend
-          const formData = new FormData();
-          formData.append('audioBlob', audioBlob, 'audio.wav');
-          
-          const response = await fetch('http://localhost:5000/transcribe-blob', {
-            method: 'POST',
-            body: formData,
-          });
-
-          const result = await response.json();
-
-          if (result.success) {
-            console.log('✅ Nhận được:', result.text);
-            setInput(result.text);
-          } else {
-            console.error('Lỗi:', result.error);
-            const errorMsg = result.errorCode === 'no-speech'
-              ? '⏱ Không nghe thấy giọng nói. Hãy nói to hơn và thử lại.'
-              : result.errorCode === 'service-error'
-              ? '🌐 Lỗi kết nối server. Kiểm tra Python backend có chạy không.'
-              : result.error || 'Lỗi không xác định';
-            notify(errorMsg, 'error', 8000);
-          }
-        } catch (err) {
-          console.error('Lỗi gửi audio:', err);
-          notify('Không thể kết nối dịch vụ giọng nói. Hãy kiểm tra server và cổng 5000.', 'error', 8000);
-        } finally {
-          setIsListening(false);
-        }
-      };
-
-      // Record for max 30 seconds
-      mediaRecorder.start();
-      const recordTimeout = setTimeout(() => {
-        if (mediaRecorder.state !== 'inactive') {
-          mediaRecorder.stop();
-        }
-      }, 30000);
-
-      // Store reference for stop button
-      recognitionRef.current = {
-        stop: () => {
-          clearTimeout(recordTimeout);
-          if (mediaRecorder.state !== 'inactive') {
-            mediaRecorder.stop();
-          }
-        }
-      };
-
-    } catch (err: any) {
-      console.error('Lỗi micro:', err);
-      setIsListening(false);
-      
-      if (err.name === 'NotAllowedError') {
-        notify('Quyền micro bị từ chối. Hãy cho phép micro trong cài đặt.', 'error', 8000);
-      } else if (err.name === 'NotFoundError') {
-        notify('Không tìm thấy micro. Hãy kiểm tra thiết bị âm thanh.', 'error', 8000);
-      } else {
-        notify('Lỗi micro: ' + err.message, 'error', 8000);
+    if (isListening || isTranscribing) return;
+    let cancelled = false;
+    let stream: MediaStream | undefined;
+    let recorder: MediaRecorder | undefined;
+    let vad: Awaited<ReturnType<typeof startLocalVad>> | undefined;
+    let recordTimeout: ReturnType<typeof setTimeout> | undefined;
+    const uploadController = new AbortController();
+    const releaseMicrophone = () => {
+      clearTimeout(recordTimeout);
+      stream?.getTracks().forEach(track => track.stop());
+      if (vad) {
+        const detector = vad;
+        vad = undefined;
+        void detector.destroy().catch(() => {});
       }
+    };
+    const stopRecording = () => {
+      clearTimeout(recordTimeout);
+      if (recorder?.state === 'recording') recorder.stop();
+      else {
+        cancelled = true;
+        releaseMicrophone();
+        setIsListening(false);
+      }
+    };
+    recognitionRef.current = {
+      stop: stopRecording,
+      cancel: () => {
+        cancelled = true;
+        uploadController.abort();
+        if (recorder?.state === 'recording') recorder.stop();
+        releaseMicrophone();
+      },
+    };
+    setIsListening(true);
+    speechService.stop();
+    setIsSpeaking(false);
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      if (cancelled) { releaseMicrophone(); return; }
+      const mediaRecorder = new MediaRecorder(stream);
+      recorder = mediaRecorder;
+      const audioChunks: Blob[] = [];
+      mediaRecorder.ondataavailable = event => { audioChunks.push(event.data); };
+      mediaRecorder.onstop = async () => {
+        releaseMicrophone();
+        if (cancelled) return;
+        const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+        audioChunks.length = 0;
+        setIsListening(false);
+        setIsTranscribing(true);
+        try {
+          const formData = new FormData();
+          formData.append('audioBlob', audioBlob, mediaRecorder.mimeType.includes('ogg') ? 'audio.ogg' : 'audio.webm');
+          const response = await fetch('http://127.0.0.1:5000/transcribe-blob', {
+            method: 'POST', body: formData, signal: uploadController.signal,
+          });
+          const result = await response.json();
+          if (result.success) setInput(result.text);
+          else notify(result.errorCode === 'no-speech'
+            ? 'Không nghe thấy giọng nói. Hãy nói to hơn và thử lại.'
+            : result.error || 'Không nhận dạng được âm thanh.', 'error', 8000);
+        } catch (error) {
+          if (!cancelled) notify('Chưa kết nối được nhận dạng cục bộ. Hãy chạy start_speech_server.bat.', 'error', 8000);
+        } finally {
+          if (!cancelled) {
+            setIsListening(false);
+            setIsTranscribing(false);
+            recognitionRef.current = null;
+          }
+        }
+      };
+      // Silero runs locally and ends only a valid speech segment after 1.8 s of silence.
+      vad = await startLocalVad(stream, stopRecording);
+      if (cancelled) { releaseMicrophone(); return; }
+      mediaRecorder.start();
+      recordTimeout = setTimeout(stopRecording, 30000);
+    } catch (error: any) {
+      releaseMicrophone();
+      if (cancelled) return;
+      setIsListening(false);
+      recognitionRef.current = null;
+      const message = error.name === 'NotAllowedError' ? 'Quyền micro bị từ chối. Hãy cho phép micro trong cài đặt.'
+        : error.name === 'NotFoundError' ? 'Không tìm thấy micro. Hãy kiểm tra thiết bị âm thanh.'
+        : 'Không khởi động được micro hoặc VAD cục bộ. Hãy thử lại.';
+      notify(message, 'error', 8000);
     }
   };
 
@@ -914,6 +921,8 @@ export default function AICoachPage() {
         <div ref={messagesEndRef} />
       </div>
 
+      {mode === 'speaking' && <p style={{ padding: '0 24px', fontSize: 12, color: 'var(--text-muted)' }}>Tự dừng sau khoảng 1,8 giây im lặng khi đã nói. Ghi âm được nhận dạng trên máy. Chỉ văn bản được gửi tới Groq khi bạn bấm gửi.</p>}
+
       {/* Suggested prompts */}
       {messages.length <= 2 && (
         <div className="lf-ai-suggestions" style={{ padding: '0 24px 10px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -1087,7 +1096,7 @@ export default function AICoachPage() {
             onFocus={e => e.currentTarget.style.borderColor = 'var(--accent)'}
             onBlur={e => e.currentTarget.style.borderColor = 'var(--border)'}
           />
-          <button onClick={isListening ? stopListening : startListening}
+          <button disabled={isTranscribing} aria-label={isTranscribing ? 'Đang nhận dạng trên máy' : isListening ? 'Dừng ghi âm' : 'Ghi âm trên máy'} onClick={isListening ? stopListening : startListening}
             title="Nói để nhập văn bản"
             style={{
               width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
@@ -1097,7 +1106,7 @@ export default function AICoachPage() {
               fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
               animation: isListening ? 'pulse 1s ease infinite' : 'none',
             }}>
-            {isListening ? '⏹' : '🎤'}
+            {isTranscribing ? '…' : isListening ? '⏹' : '🎤'}
           </button>
           <button onClick={sendMessage} disabled={isLoading || !input.trim()}
             style={{

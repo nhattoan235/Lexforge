@@ -1,177 +1,42 @@
-# Speech Recognition Backend Setup
+# Local speech recognition
 
-## Overview
+Audio is processed by faster-whisper small.en on this computer (CPU int8).
+There is no Google/Groq audio API, cloud fallback, recording file, or transcript log.
+The server binds only to 127.0.0.1:5000. Uploads stay in memory (maximum 8 MB).
+In Speaking mode, automatic Groq grammar checks are disabled. Pressing Send still
+sends the recognized text and chat context to Groq for the conversation reply.
 
-This backend uses **Google Cloud Speech-to-Text API** for speech-to-text conversion.
+## One-time setup (Windows)
 
-**Features:**
-- ✅ Free: 60 minutes per month
-- ✅ High accuracy
-- ✅ Multiple language support
-- ✅ No Python version dependencies
-
-**Requirements:**
-- Python 3.8+
-- Google Cloud account (free tier)
-- Service account credentials
-
-## Installation
-
-### 1. Create Google Cloud Project
-
-1. Visit: https://console.cloud.google.com/
-2. Sign up or log in with Google account
-3. Click **"Create Project"**
-4. Name it (e.g., "TOEIC App")
-5. Click **"Create"**
-
-### 2. Enable Speech-to-Text API
-
-1. Search for **"Speech-to-Text API"**
-2. Select it from results
-3. Click **"Enable"**
-4. Wait 1-2 minutes for activation
-
-### 3. Create Service Account & Download Credentials
-
-1. Go to **"Credentials"** (left menu)
-2. Click **"Create Credentials"**
-3. Select **"Service Account"**
-4. Set name (e.g., "toeic-app")
-5. Click **"Create and Continue"**
-6. Click **"Continue"** (skip optional steps)
-7. Click **"Go to service account"**
-8. Go to **"Keys"** tab
-9. Click **"Add Key"** → **"Create new key"**
-10. Select **"JSON"**
-11. Click **"Create"**
-12. Save the JSON file to `d:\testAppTC\test2\toeic-app\`
-
-### 4. Set Environment Variable
-
-Create or edit `.env` file in this directory:
-
-```
-GOOGLE_APPLICATION_CREDENTIALS=D:\testAppTC\test2\toeic-app\google-credentials.json
+```bat
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -r speech_requirements.txt
+.venv\Scripts\python.exe setup_speech_model.py
 ```
 
-Replace path with your actual credentials file path.
+Only the setup step downloads model files from Hugging Face into models/small.en.
+The recognition server loads local files only, with Hugging Face offline mode enabled.
+No API key, billing account, or CUDA installation is required for speech recognition.
 
-### 5. Install Python Dependencies
+## Run
 
-```bash
-python -m pip install -r speech_requirements.txt
+Double-click start_speech_server.bat, then run npm run electron-dev in another terminal.
+In AI Coach choose Luyen Noi, start a session, record up to 30 seconds. Silero VAD automatically stops after about 1.8 seconds
+of silence following valid speech; manual stop remains available.
+Wait for local transcription, review the text, and press Send if you want Groq to reply.
+Keep the server window open while using the microphone.
+
+GET http://127.0.0.1:5000/health reports processing=local and ready=true.
+Recognition can take several seconds on CPU. Quality depends on microphone/noise/accent.
+This converts speech to text; it does not score pronunciation.
+
+## Checks
+
+```bat
+.venv\Scripts\python.exe -m unittest discover -v
+npx tsc --noEmit
 ```
 
-**Dependencies:**
-- flask==2.3.3
-- flask-cors==4.0.0
-- google-cloud-speech==2.21.0
-- python-dotenv==1.0.0
-
-## Usage
-
-### Start the Backend Server
-
-```bash
-python speech_server.py
-```
-
-**Expected output:**
-```
-🎤 Speech Recognition Server (Google Cloud Speech-to-Text)
-============================================================
-✅ Google Cloud Speech API configured
-Free tier: 60 minutes/month
-Starting on http://localhost:5000
-Endpoint: POST /transcribe-blob
-============================================================
-```
-
-### Start the Electron App
-
-In a separate terminal:
-```bash
-npm run electron-dev
-```
-
-## How It Works
-
-1. User clicks 🎤 button in AI Coach
-2. Browser records audio (max 30 seconds)
-3. Audio sent to Python backend
-4. Backend sends to Google Cloud Speech API
-5. Google Cloud returns transcribed text
-6. Text appears in input field
-
-## API Endpoints
-
-### POST /transcribe-blob
-- **FormData**: `audioBlob` field with audio data (WAV, MP3, etc.)
-- **Returns**: `{success: true, text: "transcribed text"}` or error
-
-### GET /health
-- **Returns**: Server status and API availability
-
-## Troubleshooting
-
-### "Google Cloud Speech API not configured"
-- Make sure `.env` file exists
-- Verify GOOGLE_APPLICATION_CREDENTIALS path
-- Restart the server after creating `.env`
-
-### "Google Cloud credentials invalid"
-- Check credentials JSON file path
-- Verify file exists and is readable
-- Download new credentials if needed
-
-### "No module named 'google'"
-- Install dependencies: `python -m pip install -r speech_requirements.txt`
-
-### "Permission denied" when accessing microphone
-- Windows: Settings → Privacy & Security → Microphone
-- Allow the application to access microphone
-
-### "API not found" or similar error
-- Make sure Speech-to-Text API is enabled in Google Cloud Console
-- Check project has billing enabled (free tier first)
-
-## Performance
-
-- **First request**: 2-3 seconds
-- **Subsequent requests**: 1-2 seconds
-- **Max audio**: 30 seconds per request
-
-## Pricing - Free Tier!
-
-Google Cloud Speech-to-Text offers:
-- **Free tier**: 60 minutes per month
-- **Paid**: $0.024 per 15 seconds (~$0.10/minute) after free tier
-
-Examples:
-- 10 seconds of audio within free tier = $0.00
-- After 60 minutes/month: ~$0.016 per 10 seconds
-
----
-
-## Comparison with Other Services
-
-| Service | Free | Cost | Setup |
-|---------|------|------|-------|
-| Google Cloud Speech | ✅ 60 min/month | $0.024/15sec after | Medium |
-| OpenAI Whisper | ❌ | $0.02/min | Simple |
-| Azure Speech | ✅ 5 hours/month | $1/hour after | Medium |
-
----
-
-## Support
-
-For Google Cloud Speech-to-Text issues:
-- Documentation: https://cloud.google.com/speech-to-text/docs
-- Quotas & Limits: https://cloud.google.com/speech-to-text/quotas
-- Pricing: https://cloud.google.com/speech-to-text/pricing
-
-For server issues:
-- Check Flask is running
-- Verify internet connection
-- Check credentials validity
+VAD assets are copied from npm dependencies into public/vad by prestart/prebuild.
+They are served locally, without CDN requests. Run npm test -- --watchAll=false --runInBand
+for the silence timing tests.

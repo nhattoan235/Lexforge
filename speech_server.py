@@ -1,161 +1,68 @@
-#!/usr/bin/env python3
-"""
-Speech Recognition Backend using Google Cloud Speech-to-Text API
-Free tier: 60 minutes per month
-"""
-
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-from google.cloud import speech
-from google.api_core import gapic_v1
-import os
+"""Local-only speech recognition. Model download is a separate setup step."""
 import io
-from werkzeug.utils import secure_filename
-import tempfile
-import traceback
-from dotenv import load_dotenv
+import os
+import threading
+from pathlib import Path
+from flask import Flask, Request, jsonify, request
+from flask_cors import CORS
+from werkzeug.exceptions import RequestEntityTooLarge
 
-load_dotenv()
+MODEL_PATH = Path(__file__).resolve().parent / "models" / "small.en"
 
-app = Flask(__name__)
-CORS(app)
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max
-app.config['UPLOAD_FOLDER'] = tempfile.gettempdir()
+class MemoryRequest(Request):
+    # Flask normally spools larger uploads to disk; keep microphone audio in RAM.
+    def _get_file_stream(self, *args, **kwargs):
+        return io.BytesIO()
 
-# Initialize Google Cloud Speech client
-try:
-    speech_client = speech.SpeechClient()
-    google_available = True
-except Exception as e:
-    print(f"⚠️ Google Cloud Speech client initialization failed: {e}")
-    print("   Make sure GOOGLE_APPLICATION_CREDENTIALS is set")
-    google_available = False
-    speech_client = None
+def load_transcriber():
+    os.environ["HF_HUB_OFFLINE"] = "1"
+    os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+    from faster_whisper import WhisperModel
+    model = WhisperModel(str(MODEL_PATH), device="cpu", compute_type="int8", local_files_only=True)
+    lock = threading.Lock()
+    def transcribe(audio):
+        with lock:
+            segments, _ = model.transcribe(audio, language="en", beam_size=1, vad_filter=True,
+                                           condition_on_previous_text=False)
+            return " ".join(segment.text.strip() for segment in segments).strip()
+    return transcribe
 
-@app.route('/health', methods=['GET'])
-def health():
-    """Health check endpoint"""
-    status = "✅" if google_available else "❌"
-    return jsonify({
-        'status': 'ok',
-        'service': 'Speech Recognition (Google Cloud)',
-        'api_available': status
-    })
+def create_app(transcribe):
+    app = Flask(__name__)
+    app.request_class = MemoryRequest
+    app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024
+    CORS(app, origins=["http://localhost:3000", "http://127.0.0.1:3000", "null"])
 
-@app.route('/transcribe-blob', methods=['POST'])
-def transcribe_blob():
-    """
-    Transcribe audio using Google Cloud Speech-to-Text API
-    Expected: 'audioBlob' in request.files
-    Returns: JSON with transcribed text or error
-    """
-    if not google_available:
-        return jsonify({
-            'success': False,
-            'error': 'Google Cloud Speech API not configured. Set GOOGLE_APPLICATION_CREDENTIALS environment variable.',
-            'errorCode': 'api-not-available'
-        }), 500
+    @app.get("/health")
+    def health():
+        return jsonify(status="ok", service="faster-whisper", processing="local", model="small.en", ready=True)
 
+    @app.errorhandler(RequestEntityTooLarge)
+    def too_large(error):
+        return jsonify(success=False, error="Audio too large (maximum 8 MB).", errorCode="audio-too-large"), 413
+
+    @app.post("/transcribe-blob")
+    def transcribe_blob():
+        if "audioBlob" not in request.files:
+            return jsonify(success=False, error="No audio provided.", errorCode="invalid-audio"), 400
+        with io.BytesIO(request.files["audioBlob"].read()) as audio:
+            if not audio.getbuffer().nbytes:
+                return jsonify(success=False, error="Empty audio.", errorCode="invalid-audio"), 400
+            try:
+                text = transcribe(audio)
+            except Exception:
+                # Do not log recordings or transcripts, including decoder error details.
+                return jsonify(success=False, error="Cannot decode or recognize audio locally.", errorCode="transcription-error"), 500
+        if not text:
+            return jsonify(success=False, error="No speech detected.", errorCode="no-speech"), 400
+        return jsonify(success=True, text=text)
+    return app
+
+if __name__ == "__main__":
+    print("Loading local small.en model (CPU int8)...", flush=True)
     try:
-        if 'audioBlob' not in request.files:
-            return jsonify({'error': 'No audio blob provided'}), 400
-
-        audio_file = request.files['audioBlob']
-        audio_data = audio_file.read()
-
-        if not audio_data:
-            return jsonify({'error': 'Empty audio file'}), 400
-
-        try:
-            # Prepare audio for Google Cloud Speech API
-            audio = speech.RecognitionAudio(content=audio_data)
-            
-            config = speech.RecognitionConfig(
-                encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-                sample_rate_hertz=48000,
-                language_code='en-US',
-                use_enhanced=False,  # Free tier doesn't support enhanced
-            )
-
-            # Call Google Cloud Speech-to-Text API
-            response = speech_client.recognize(config=config, audio=audio)
-
-            # Extract transcribed text
-            transcript = ""
-            if response.results:
-                for result in response.results:
-                    if result.alternatives:
-                        transcript += result.alternatives[0].transcript + " "
-            
-            transcript = transcript.strip()
-            
-            if not transcript:
-                return jsonify({
-                    'success': False,
-                    'error': 'No speech detected',
-                    'errorCode': 'no-speech'
-                }), 400
-
-            return jsonify({
-                'success': True,
-                'text': transcript
-            })
-
-        except Exception as api_err:
-            error_msg = str(api_err)
-            print(f"Google API Error: {error_msg}")
-            
-            if 'UNAUTHENTICATED' in error_msg or 'permission' in error_msg.lower():
-                return jsonify({
-                    'success': False,
-                    'error': 'Google Cloud credentials invalid. Check GOOGLE_APPLICATION_CREDENTIALS.',
-                    'errorCode': 'auth-error'
-                }), 401
-            
-            elif 'RESOURCE_EXHAUSTED' in error_msg or 'quota' in error_msg.lower():
-                return jsonify({
-                    'success': False,
-                    'error': 'Google Cloud Speech API quota exceeded. Free tier: 60 min/month.',
-                    'errorCode': 'quota-exceeded'
-                }), 429
-            
-            else:
-                return jsonify({
-                    'success': False,
-                    'error': f'Google Cloud API error: {error_msg}',
-                    'errorCode': 'api-error'
-                }), 500
-
-    except Exception as e:
-        print(f"Error: {traceback.format_exc()}")
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'errorCode': 'server-error'
-        }), 500
-
-if __name__ == '__main__':
-    print("🎤 Speech Recognition Server (Google Cloud Speech-to-Text)")
-    print("=" * 60)
-    
-    if google_available:
-        print("✅ Google Cloud Speech API configured")
-    else:
-        print("❌ Google Cloud Speech API NOT configured")
-        print("   Setup instructions:")
-        print("   1. Create Google Cloud project")
-        print("   2. Enable Speech-to-Text API")
-        print("   3. Create service account & download credentials")
-        print("   4. Set: $env:GOOGLE_APPLICATION_CREDENTIALS='path/to/credentials.json'")
-        print("   5. Restart this server")
-    
-    print()
-    print("Free tier: 60 minutes/month")
-    print("Starting on http://localhost:5000")
-    print("Endpoint: POST /transcribe-blob")
-    print("=" * 60)
-    print()
-    
-    app.run(host='127.0.0.1', port=5000, debug=False)
-
-
+        transcribe = load_transcriber()
+    except Exception:
+        raise SystemExit("Local model unavailable. Run .venv\\Scripts\\python.exe setup_speech_model.py first.")
+    print("Local speech server ready: http://127.0.0.1:5000. Audio stays on this computer.", flush=True)
+    create_app(transcribe).run(host="127.0.0.1", port=5000, debug=False)
