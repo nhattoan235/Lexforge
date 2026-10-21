@@ -3,6 +3,7 @@ const { startLocalSpeech } = require('./local-speech.cjs');
 const { createConversations } = require('./conversations.cjs');
 const { createNotesStorage } = require('./notes-storage.cjs');
 const { assistNotes } = require('./notes-assistant.cjs');
+const { createCoachProgressStore, observeCoachAttempt } = require('./coach-progress.cjs');
 const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, screen, clipboard, safeStorage, globalShortcut, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -1972,6 +1973,11 @@ let SQL = null;
 let notesStorage = null;
 let conversations = null;
 let assistantApiPool = null;
+let coachProgress = null;
+function getCoachProgress(){
+  if(!coachProgress)coachProgress=createCoachProgressStore(path.join(userDataPath,'coach-progress.json'));
+  return coachProgress;
+}
 function assistantTransport(url, options) {
   if (!assistantApiPool) throw Error('Chưa đọc được kho API key trợ lý. Hãy mở Cài đặt để kiểm tra.');
   return assistantApiPool.fetch(url, options);
@@ -2244,8 +2250,21 @@ ipcMain.handle('assistant:chat', async (event, operation, args = {}) => {
       case 'read': data = conversations.read(args.id,args.lastId); break;
       case 'remove': data = conversations.remove(args.id); break;
       case 'migrate': data = conversations.migrate(args.messages); break;
+      case 'coachReply': {
+        if (event.sender !== mainWindow?.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) throw Error('AI Coach chỉ dùng được trong cửa sổ chính.');
+        data = await require('./ielts-coach.cjs').coachReply(args, 'managed', assistantTransport);
+        break;
+      }
+      case 'coachProgressSnapshot':
+      case 'coachProgressClear':
+      case 'coachProgressRecord': {
+        if (event.sender !== mainWindow?.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) throw Error('Hồ sơ AI Coach chỉ dùng được trong cửa sổ chính.');
+        const store=getCoachProgress();
+        data=operation==='coachProgressSnapshot'?store.snapshot():operation==='coachProgressClear'?store.clear():await observeCoachAttempt(store,args,'managed',assistantTransport);
+        break;
+      }
       case 'correctEnglish': {
-        data = await require('./english-correction.cjs').correctEnglish(args.text, 'managed', assistantTransport);
+        data = await require('./english-correction.cjs').correctEnglish(args.text, 'managed', assistantTransport, args.mode);
         break;
       }
       case 'send': data = await conversations.send(args.id,args.prompt,args.noteId); break;
