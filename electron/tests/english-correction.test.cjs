@@ -1,8 +1,10 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {correctEnglish}=require('../english-correction.cjs');
-const response=value=>async()=>({ok:true,json:async()=>({choices:[{message:{content:JSON.stringify(value)}}]})});
+const pass={status:'pass',task_completion:'complete',issues:[],corrected_response:null};
+const isReview=options=>options?.body&&JSON.parse(options.body).messages[0].content.startsWith('You are the bounded');
+const response=value=>async(_url,options)=>({ok:true,json:async()=>({choices:[{message:{content:JSON.stringify(isReview(options)?pass:value)}}]})});
 test('correction uses only supplied text and returns structured feedback',async()=>{
- let payload;const result=await correctEnglish('I usually spending my weekend at home.','key',async(_url,options)=>{payload=JSON.parse(options.body);return response({hasError:true,correctedText:'I usually spend my weekend at home.',explanation:'Thói quen dùng hiện tại đơn, chủ ngữ I đi với spend.'})();});
+ let payload;const result=await correctEnglish('I usually spending my weekend at home.','key',async(_url,options)=>{if(isReview(options))return response(pass)();payload=JSON.parse(options.body);return response({hasError:true,correctedText:'I usually spend my weekend at home.',explanation:'Thói quen dùng hiện tại đơn, chủ ngữ I đi với spend.'})();});
  assert.equal(payload.messages.at(-1).content,'I usually spending my weekend at home.');assert.equal(result.hasError,true);
 });
 test('rejects invalid input before sending and malformed suggestions',async()=>{

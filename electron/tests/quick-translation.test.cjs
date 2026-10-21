@@ -113,23 +113,29 @@ function scheduler(request) {
   return { context, shown, run: () => timer() };
 }
 
-test('popup appears before the network finishes and then receives the translation', async () => {
+test('popup waits for a valid translation before opening', async () => {
   let resolve;
   const h = scheduler(() => new Promise(r => { resolve = r; }));
   const pending = h.run();
-  assert.deepEqual(h.shown, [['Đang dịch…', 1, false, true]]);
+  assert.deepEqual(h.shown, []);
   resolve('Xin chào.');
   await pending;
   assert.deepEqual(h.shown.at(-1), ['Xin chào.', 1]);
 });
 
-test('empty response and network failure produce visible feedback', async () => {
-  for (const request of [async () => '', async () => { throw new Error('network'); }]) {
-    const h = scheduler(request);
-    await h.run();
-    assert.equal(h.shown.length, 2);
-    assert.equal(h.shown.at(-1)[2], true);
-  }
+test('an unsuitable translation never opens a popup or enters the cache', async () => {
+  const h = scheduler(async () => '');
+  await h.run();
+  assert.deepEqual(h.shown, []);
+  assert.equal(h.context.quickTranslationCache.size, 0);
+  assert.equal(h.context.quickSelectionVersion, 2);
+});
+
+test('network failures still produce visible feedback', async () => {
+  const h = scheduler(async () => { throw new Error('network'); });
+  await h.run();
+  assert.equal(h.shown.length, 1);
+  assert.equal(h.shown[0][2], true);
 });
 
 test('a response for a dismissed selection never replaces the current popup', async () => {
@@ -139,7 +145,7 @@ test('a response for a dismissed selection never replaces the current popup', as
   h.context.clearQuickSelection();
   resolve('Old translation');
   await pending;
-  assert.equal(h.shown.length, 1);
+  assert.equal(h.shown.length, 0);
 });
 
 test('an unrelated non-English selection cannot clear the active quick popup', () => {

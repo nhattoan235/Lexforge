@@ -24,7 +24,7 @@ function createConversations({filePath,respond,onChange=()=>{}}){
  const history=chat.messages.slice(-12).map(({role,content})=>({role,content:content.slice(0,12000)}));pending.add(id);
  try{commit(()=>{const current=get(id);current.messages.push({id:randomUUID(),role:'user',content:prompt});current.draft='';current.error='';current.updatedAt=new Date().toISOString();if(current.title==='Hội thoại mới')current.title=prompt.trim().replace(/\s+/g,' ').slice(0,55);});}
  catch(error){pending.delete(id);throw error;}
- try{const result=await respond({prompt,history,noteId});pending.delete(id);commit(()=>{const current=get(id);current.messages.push({id:randomUUID(),role:'assistant',content:result.reply});current.unread=true;current.updatedAt=new Date().toISOString();});return {state:snapshot(),note:result.action==='answer'?null:result.note,warning:result.warning||''};}
+ try{const result=await respond({prompt,history,noteId});pending.delete(id);commit(()=>{const current=get(id);current.messages.push({id:randomUUID(),role:'assistant',content:result.reply,...(result.quality?{quality:result.quality}:{})});current.unread=true;current.updatedAt=new Date().toISOString();});return {state:snapshot(),note:result.action==='answer'?null:result.note,warning:result.warning||''};}
  catch(error){pending.delete(id);try{commit(()=>{const current=get(id);current.error=error.message||'Không nhận được phản hồi.';if(!current.draft)current.draft=prompt;});}catch{onChange(snapshot());}throw error;}
  }
  };

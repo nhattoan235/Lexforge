@@ -1,0 +1,437 @@
+{
+  "version": "1.1",
+  "examples": [
+    {
+      "id": "example_01",
+      "context": "general",
+      "topic": "usually: present habit",
+      "input": "I usually spending my weekend at home.",
+      "error_status": "error",
+      "minimal_correction": "I usually spend my weekend at home.",
+      "optional_upgrade": null,
+      "explanation_vi": "Ở cách diễn đạt thói quen này, chủ ngữ I dùng spend ở hiện tại đơn; spending đứng riêng không tạo vị ngữ hữu hạn.",
+      "explanation_en": "For this present habit, I takes spend; spending alone does not form a finite predicate.",
+      "rule_ids": [
+        "rule_10",
+        "rule_12",
+        "rule_13"
+      ],
+      "source_ids": [
+        "source_present_simple"
+      ],
+      "authorship": "original_editorial_example"
+    },
+    {
+      "id": "example_02",
+      "context": "general",
+      "topic": "usually: third-person agreement",
+      "input": "She usually spend her weekends at home.",
+      "error_status": "error",
+      "minimal_correction": "She usually spends her weekends at home.",
+      "optional_upgrade": null,
+      "explanation_vi": "She cần spends trong câu khẳng định hiện tại đơn này; usually không quyết định đuôi động từ.",
+      "explanation_en": "She requires spends in this affirmative present-simple clause; usually does not determine the ending.",
+      "rule_ids": [
+        "rule_10",
+        "rule_12"
+      ],
+      "source_ids": [
+        "source_present_simple"
+      ],
+      "authorship": "original_editorial_example"
+    },
+    {
+      "id": "example_03",
+      "context": "speaking",
+      "topic": "usually: activity in progress at recurring times",
+      "input": "I am usually working when you call.",
+      "error_status": "valid",
+      "minimal_correction": null,
+      "optional_upgrade": null,
+      "explanation_vi": "Câu có thể đúng: việc làm thường đang diễn ra vào lúc bạn gọi. Có usually không loại trừ am working.",
+      "explanation_en": "This can describe work in progress at the recurring times of your calls. Usually does not exclude am working.",
+      "rule_ids": [
+        "rule_12",
+        "rule_13"
+      ],
+      "source_ids": [
+        "source_present_continuous"
+      ],
+      "authorship": "original_editorial_example"
+    },
+    {
+      "id": "example_04",
+      "context": "general",
+      "topic": "usually: singular weekend",
+      "input": "I usually spend my weekend at home.",
+      "error_status": "valid",
+      "minimal_correction": null,
+      "optional_upgrade": "I usually spend my weekends at home.",
+      "explanation_vi": "My weekend không phải lỗi. My weekends là lựa chọn tùy ngữ cảnh để nói khái quát về nhiều cuối tuần.",
+      "explanation_en": "My weekend is not an error. My weekends is an optional choice for a general pattern across weekends.",
+      "rule_ids": [
+        "rule_13"
+      ],
+      "source_ids": [],
+      "authorship": "original_editorial_example"
+    },
+    {
+      "id": "example_05",
+      "context": "general",
+      "topic": "decision collocation",
+      "input": "We need to do a decision today.",
+      "error_status": "error",
+      "minimal_correction": "We need to make a decision today.",
+      "optional_upgrade": null,
+      "explanation_vi": "Trong nghĩa quyết định việc gì, make a decision là kết hợp phù hợp; do a decision không phù hợp ở đây.",
+      "explanation_en": "Make a decision is the appropriate combination for deciding something here.",
+      "rule_ids": [
+        "rule_07"
+      ],
+      "source_ids": [
+        "source_collocation"
+      ],
+      "authorship": "original_editorial_example"
+    },
+    {
+      "id": "example_06",
+      "context": "writing",
+      "topic": "rain collocation in a weather report",
+      "input": "Heavy rain delayed the match.",
+      "error_status": "valid",
+      "minimal_correction": null,
+      "optional_upgrade": null,
+      "explanation_vi": "Heavy rain là kết hợp tự nhiên; không cần thay heavy bằng từ hiếm hơn.",
+      "explanation_en": "Heavy rain is a natural combination; a rarer adjective is unnecessary.",
+      "rule_ids": [
+        "rule_06",
+        "rule_07"
+      ],
+      "source_ids": [
+        "source_rain"
+      ],
+      "authorship": "original_editorial_example"
+    },
+    {
+      "id": "example_07",
+      "context": "writing",
+      "topic": "economic growth of a national economy",
+      "input": "The report examines economical growth.",
+      "error_status": "error",
+      "minimal_correction": "The report examines economic growth.",
+      "optional_upgrade": null,
+      "explanation_vi": "Ở nghĩa tăng trưởng của nền kinh tế, dùng economic. Economical nói về việc tiết kiệm nguồn lực.",
+      "explanation_en": "Economic fits growth of an economy; economical concerns avoiding waste.",
+      "rule_ids": [
+        "rule_05",
+        "rule_07"
+      ],
+      "source_ids": [
+        "source_economic"
+      ],
+      "authorship": "original_editorial_example"
+    },
+    {
+      "id": "example_08",
+      "context": "general",
+      "topic": "meaning-preserving paraphrase",
+      "input": "The fee is too high for me to pay.",
+      "error_status": "valid",
+      "minimal_correction": null,
+      "optional_upgrade": "I cannot afford the fee.",
+      "explanation_vi": "Có thể diễn đạt lại như trên khi đang nói về khả năng chi trả; không đổi thành I refuse to pay vì đó là ý từ chối.",
+      "explanation_en": "This paraphrase fits financial inability; I refuse to pay would express refusal instead.",
+      "rule_ids": [
+        "rule_03",
+        "rule_09"
+      ],
+      "source_ids": [],
+      "authorship": "original_editorial_example"
+    },
+    {
+      "id": "example_09",
+      "context": "general",
+      "topic": "agreement with each",
+      "input": "Each of these options has a drawback.",
+      "error_status": "valid",
+      "minimal_correction": null,
+      "optional_upgrade": null,
+      "explanation_vi": "Each là trung tâm của chủ ngữ số ít; options trong cụm of không buộc dùng have.",
+      "explanation_en": "Each heads the singular subject; options inside the of-phrase does not require have.",
+      "rule_ids": [
+        "rule_10",
+        "rule_12"
+      ],
+      "source_ids": [],
+      "authorship": "original_editorial_example"
+    },
+    {
+      "id": "example_10",
+      "context": "speaking",
+      "topic": "completed past visit",
+      "input": "I visit my aunt yesterday.",
+      "error_status": "error",
+      "minimal_correction": "I visited my aunt yesterday.",
+      "optional_upgrade": null,
+      "explanation_vi": "Trong lời kể thông thường về chuyến thăm đã kết thúc hôm qua, dùng visited; không suy rộng rằng mọi câu có yesterday đều theo một dạng duy nhất.",
+      "explanation_en": "Visited fits an ordinary report of this completed past visit; yesterday is not a universal verb-form rule.",
+      "rule_ids": [
+        "rule_11",
+        "rule_12"
+      ],
+      "source_ids": [],
+      "authorship": "original_editorial_example"
+    },
+    {
+      "id": "example_11",
+      "context": "writing",
+      "topic": "standalone sentence in an essay",
+      "input": "Although the route is longer.",
+      "error_status": "error",
+      "minimal_correction": null,
+      "optional_upgrade": null,
+      "explanation_vi": "Nhãn error áp dụng vì ngữ cảnh này yêu cầu một câu độc lập hoàn chỉnh: mệnh đề although còn thiếu mệnh đề chính. Cần phần tiếp nối hoặc ngữ cảnh để giữ quan hệ nhượng bộ; bỏ although có thể làm mất ý nên không đưa bản sửa khi chưa đủ dữ liệu. Không suy rộng nhãn lỗi này sang fragment trong tiêu đề, đối thoại hoặc trích dẫn.",
+      "explanation_en": "Error applies because this context requires a complete standalone sentence: the although-clause needs a main clause. Further context is needed to preserve the concession; deleting although may lose meaning, so no correction is supplied. This does not label all fragments in headings, dialogue or quotations as errors.",
+      "rule_ids": [
+        "rule_03",
+        "rule_11",
+        "rule_12",
+        "rule_13",
+        "rule_21",
+        "rule_24"
+      ],
+      "source_ids": [],
+      "authorship": "original_editorial_example"
+    },
+    {
+      "id": "example_12",
+      "context": "writing",
+      "topic": "concessive complex sentence",
+      "input": "Although the route is longer, but it is quieter.",
+      "error_status": "error",
+      "minimal_correction": "Although the route is longer, it is quieter.",
+      "optional_upgrade": null,
+      "explanation_vi": "Trong cấu trúc nhượng bộ chuẩn này, bỏ but; although đã nối mệnh đề phụ với mệnh đề chính.",
+      "explanation_en": "Remove but in this standard concessive construction; although already introduces the subordinate clause.",
+      "rule_ids": [
+        "rule_11",
+        "rule_12",
+        "rule_15"
+      ],
+      "source_ids": [],
+      "authorship": "original_editorial_example"
+    },
+    {
+      "id": "example_13",
+      "context": "speaking",
+      "topic": "pair_1: asking a colleague about an absence",
+      "input": "Why couldn't you come to the meeting?",
+      "error_status": "valid",
+      "minimal_correction": null,
+      "optional_upgrade": null,
+      "explanation_vi": "Cặp 1 với example_14: câu hỏi hội thoại trực tiếp, dùng contraction hợp lệ.",
+      "explanation_en": "Pair 1 with example_14: a direct conversational question with a suitable contraction.",
+      "rule_ids": [
+        "rule_08",
+        "rule_17"
+      ],
+      "source_ids": [
+        "source_register"
+      ],
+      "authorship": "original_editorial_example"
+    },
+    {
+      "id": "example_14",
+      "context": "writing",
+      "topic": "pair_1: a formal email asking about an absence",
+      "input": "Could you explain why you were unable to attend the meeting?",
+      "error_status": "valid",
+      "minimal_correction": null,
+      "optional_upgrade": null,
+      "explanation_vi": "Cặp 1 với example_13: cùng hỏi lý do vắng mặt nhưng phù hợp email trang trọng hơn; không phải bản sửa lỗi của câu nói.",
+      "explanation_en": "Pair 1 with example_13: the same enquiry in a more formal email register, not a correction of the spoken version.",
+      "rule_ids": [
+        "rule_08",
+        "rule_19"
+      ],
+      "source_ids": [
+        "source_register"
+      ],
+      "authorship": "original_editorial_example"
+    },
+    {
+      "id": "example_15",
+      "context": "speaking",
+      "topic": "pair_2: discussing price",
+      "input": "It's cheaper, so I'd choose it.",
+      "error_status": "valid",
+      "minimal_correction": null,
+      "optional_upgrade": null,
+      "explanation_vi": "Cặp 2 với example_16: it's và I'd tự nhiên khi trao đổi lựa chọn.",
+      "explanation_en": "Pair 2 with example_16: contractions suit a conversation about a choice.",
+      "rule_ids": [
+        "rule_17"
+      ],
+      "source_ids": [
+        "source_register"
+      ],
+      "authorship": "original_editorial_example"
+    },
+    {
+      "id": "example_16",
+      "context": "writing",
+      "topic": "pair_2: a written recommendation",
+      "input": "I would choose this option because it is less expensive.",
+      "error_status": "valid",
+      "minimal_correction": null,
+      "optional_upgrade": null,
+      "explanation_vi": "Cặp 2 với example_15: phù hợp đề xuất bằng văn bản; because cũng dùng được trong văn nói.",
+      "explanation_en": "Pair 2 with example_15: suitable for a written recommendation; because is also valid in speech.",
+      "rule_ids": [
+        "rule_08",
+        "rule_19"
+      ],
+      "source_ids": [],
+      "authorship": "original_editorial_example"
+    },
+    {
+      "id": "example_17",
+      "context": "speaking",
+      "topic": "pair_3: explaining a delay to a colleague",
+      "input": "We were short of time, so we put it off.",
+      "error_status": "valid",
+      "minimal_correction": null,
+      "optional_upgrade": null,
+      "explanation_vi": "Cặp 3 với example_18: put it off phù hợp khi người nghe đã biết it chỉ việc gì.",
+      "explanation_en": "Pair 3 with example_18: put it off works when the listener already knows what it refers to.",
+      "rule_ids": [
+        "rule_08",
+        "rule_17"
+      ],
+      "source_ids": [],
+      "authorship": "original_editorial_example"
+    },
+    {
+      "id": "example_18",
+      "context": "writing",
+      "topic": "pair_3: a formal update; it refers to the meeting",
+      "input": "We postponed the meeting because we had insufficient time.",
+      "error_status": "valid",
+      "minimal_correction": null,
+      "optional_upgrade": null,
+      "explanation_vi": "Cặp 3 với example_17: nêu rõ meeting vì ngữ cảnh đã xác nhận; không được tự đoán danh từ nếu chưa biết it chỉ gì.",
+      "explanation_en": "Pair 3 with example_17: meeting is explicit because the context identifies it; do not guess an unknown referent.",
+      "rule_ids": [
+        "rule_03",
+        "rule_09",
+        "rule_19"
+      ],
+      "source_ids": [],
+      "authorship": "original_editorial_example"
+    },
+    {
+      "id": "example_19",
+      "context": "speaking",
+      "topic": "pair_4: an uncertain estimate",
+      "input": "I'm not sure, but I think it'll take two days.",
+      "error_status": "valid",
+      "minimal_correction": null,
+      "optional_upgrade": null,
+      "explanation_vi": "Cặp 4 với example_20: giữ cả ước lượng hai ngày và sự chưa chắc chắn.",
+      "explanation_en": "Pair 4 with example_20: retain both the two-day estimate and uncertainty.",
+      "rule_ids": [
+        "rule_03",
+        "rule_17"
+      ],
+      "source_ids": [],
+      "authorship": "original_editorial_example"
+    },
+    {
+      "id": "example_20",
+      "context": "writing",
+      "topic": "pair_4: a written estimate",
+      "input": "I estimate that it will take two days, although I am not certain.",
+      "error_status": "valid",
+      "minimal_correction": null,
+      "optional_upgrade": null,
+      "explanation_vi": "Cặp 4 với example_19: văn bản rõ hơn nhưng không biến ước lượng thành cam kết.",
+      "explanation_en": "Pair 4 with example_19: a written estimate that does not turn uncertainty into a commitment.",
+      "rule_ids": [
+        "rule_03",
+        "rule_19"
+      ],
+      "source_ids": [],
+      "authorship": "original_editorial_example"
+    },
+    {
+      "id": "example_21",
+      "context": "general",
+      "topic": "certainty and scope",
+      "input": "The change may help some users.",
+      "error_status": "valid",
+      "minimal_correction": null,
+      "optional_upgrade": null,
+      "explanation_vi": "Giữ may và some; đổi thành will help all users làm tăng độ chắc chắn và mở rộng phạm vi.",
+      "explanation_en": "Retain may and some; will help all users increases certainty and broadens scope.",
+      "rule_ids": [
+        "rule_03",
+        "rule_09"
+      ],
+      "source_ids": [],
+      "authorship": "original_editorial_example"
+    },
+    {
+      "id": "example_22",
+      "context": "general",
+      "topic": "American spelling",
+      "input": "The color is blue.",
+      "error_status": "valid",
+      "minimal_correction": null,
+      "optional_upgrade": null,
+      "explanation_vi": "Color là chính tả Mỹ hợp lệ; colour là lựa chọn Anh, không phải bản sửa lỗi bắt buộc.",
+      "explanation_en": "Color is valid American spelling; colour is a British alternative, not a mandatory correction.",
+      "rule_ids": [
+        "rule_13",
+        "rule_14"
+      ],
+      "source_ids": [],
+      "authorship": "original_editorial_example"
+    },
+    {
+      "id": "example_23",
+      "context": "speaking",
+      "topic": "correction practice: standalone affirmative present-simple clause in standard English",
+      "input": "He go home.",
+      "error_status": "error",
+      "minimal_correction": "He goes home.",
+      "optional_upgrade": null,
+      "explanation_vi": "Trong câu khẳng định hiện tại đơn độc lập đang xét, chủ ngữ He cần goes trong tiếng Anh chuẩn phục vụ luyện IELTS. Đây không phải quy tắc rằng chuỗi he go sai trong mọi cấu trúc hoặc biến thể. Nếu tác vụ chỉ yêu cầu trích nguyên văn, giữ He go home. và không sửa; bảo toàn trích dẫn không làm câu trở thành đúng ngữ pháp.",
+      "explanation_en": "In this standalone affirmative present-simple clause, He requires goes in the standard English used for IELTS practice. This is not a claim about every construction or variety containing he go. For a verbatim-only task, preserve He go home. without correction; quotation fidelity does not make it grammatical.",
+      "rule_ids": [
+        "rule_04",
+        "rule_10",
+        "rule_13"
+      ],
+      "source_ids": [],
+      "authorship": "original_editorial_example"
+    },
+    {
+      "id": "example_24",
+      "context": "speaking",
+      "topic": "past residence; current residence unspecified",
+      "input": "I lived here for five years.",
+      "error_status": "context_dependent",
+      "minimal_correction": null,
+      "optional_upgrade": null,
+      "explanation_vi": "Câu đúng khi nói về giai đoạn đã kết thúc. Nếu vẫn sống ở đây, cần làm rõ ý trước khi đề xuất hiện tại hoàn thành.",
+      "explanation_en": "This is valid for a completed period. Clarify whether residence continues before proposing a present-perfect alternative.",
+      "rule_ids": [
+        "rule_03",
+        "rule_12",
+        "rule_24"
+      ],
+      "source_ids": [],
+      "authorship": "original_editorial_example"
+    }
+  ]
+}

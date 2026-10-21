@@ -1,8 +1,9 @@
+const { createApiPool } = require('./api-pool.cjs');
 const { startLocalSpeech } = require('./local-speech.cjs');
 const { createConversations } = require('./conversations.cjs');
 const { createNotesStorage } = require('./notes-storage.cjs');
 const { assistNotes } = require('./notes-assistant.cjs');
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, screen, clipboard, globalShortcut, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, screen, clipboard, safeStorage, globalShortcut, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -860,14 +861,14 @@ function scheduleQuickTranslation(selection) {
       showQuickTranslation(cached, version);
       return;
     }
-    showQuickTranslation('Đang dịch…', version, false, true);
+    // Wait for a valid result so rejected selections never flash a popup.
     const controller = new AbortController();
     quickSelectionAbort = controller;
     try {
       const translation = await requestQuickTranslation(selection.text, controller.signal);
       if (version !== quickSelectionVersion) return;
       if (!translation) {
-        showQuickTranslation('Không nhận được bản dịch tiếng Anh phù hợp. Bạn vẫn có thể nghe câu đã chọn.', version, true);
+        clearQuickSelection();
         return;
       }
       quickTranslationCache.set(selection.text, translation);
@@ -1970,6 +1971,11 @@ let db = null;
 let SQL = null;
 let notesStorage = null;
 let conversations = null;
+let assistantApiPool = null;
+function assistantTransport(url, options) {
+  if (!assistantApiPool) throw Error('Chưa đọc được kho API key trợ lý. Hãy mở Cài đặt để kiểm tra.');
+  return assistantApiPool.fetch(url, options);
+}
 let chatShortcutAvailable = false;
 let chatShortcut = null;
 
@@ -2003,12 +2009,14 @@ async function initDatabase() {
       }
     },
   });
+  try {
+    assistantApiPool = createApiPool({filePath:path.join(userDataPath,'assistant-api-keys.json'),encryption:safeStorage,getLegacyKey:()=>db.exec('SELECT SettingValue FROM UserSettings WHERE SettingKey = ?', ['groq_api_key'])[0]?.values?.[0]?.[0]||''});
+  } catch { console.error('Assistant API key store could not be loaded. Existing file was preserved.'); }
   conversations = createConversations({
     filePath: path.join(userDataPath, 'assistant-conversations.json'),
     respond: args => {
-      const apiKey = db.exec('SELECT SettingValue FROM UserSettings WHERE SettingKey = ?', ['groq_api_key'])[0]?.values?.[0]?.[0];
       const store = Object.fromEntries(['get','create','update','addMessages'].map(name => [name, (...values) => notesStorage.getStore()[name](...values)]));
-      return assistNotes(store, args, apiKey);
+      return assistNotes(store, args, 'managed', assistantTransport);
     },
     onChange: state => {
       const payload = {...state,shortcutAvailable:chatShortcutAvailable,shortcut:chatShortcut};
@@ -2198,9 +2206,8 @@ ipcMain.handle('notes:request', async (event, operation, args = {}) => {
     }
     // Conversation works even when the chosen notes drive is unavailable.
     if (operation === 'assist') {
-      const settings = db.exec('SELECT SettingValue FROM UserSettings WHERE SettingKey = ?', ['groq_api_key']);
       const lazyStore = Object.fromEntries(['get', 'create', 'update', 'addMessages'].map(name => [name, (...values) => notesStorage.getStore()[name](...values)]));
-      return { success: true, data: await assistNotes(lazyStore, args, settings[0]?.values?.[0]?.[0]) };
+      return { success: true, data: await assistNotes(lazyStore, args, 'managed', assistantTransport) };
     }
     const notesStore = notesStorage.getStore();
     let data;
@@ -2238,13 +2245,23 @@ ipcMain.handle('assistant:chat', async (event, operation, args = {}) => {
       case 'remove': data = conversations.remove(args.id); break;
       case 'migrate': data = conversations.migrate(args.messages); break;
       case 'correctEnglish': {
-        const key = db.exec('SELECT SettingValue FROM UserSettings WHERE SettingKey = ?', ['groq_api_key'])[0]?.values?.[0]?.[0];
-        data = await require('./english-correction.cjs').correctEnglish(args.text, key);
+        data = await require('./english-correction.cjs').correctEnglish(args.text, 'managed', assistantTransport);
         break;
       }
       case 'send': data = await conversations.send(args.id,args.prompt,args.noteId); break;
       default: throw Error('Unknown chat operation');
     }
     return {success:true,data};
+  } catch(error) { return {success:false,error:error.message}; }
+});
+
+// Only the main Settings window can manage credentials; the floating iframe never receives keys.
+ipcMain.handle('assistant:api-settings', (event, operation, args = {}) => {
+  try {
+    if (event.sender !== mainWindow?.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) throw Error('API settings are available only in the main window.');
+    if (!assistantApiPool) throw Error('Không đọc được kho API key trợ lý. File cũ được giữ nguyên.');
+    if (!args || typeof args !== 'object' || Array.isArray(args)) throw Error('Yêu cầu cấu hình không hợp lệ.');
+    if (!['snapshot','add','toggle','remove','configure'].includes(operation)) throw Error('Thao tác cấu hình không hợp lệ.');
+    return {success:true,data:operation==='snapshot'?assistantApiPool.snapshot():assistantApiPool[operation](args)};
   } catch(error) { return {success:false,error:error.message}; }
 });

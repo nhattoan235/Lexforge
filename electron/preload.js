@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  apiKeyRequest: (operation,args) => ipcRenderer.invoke('assistant:api-settings',operation,args),
   chatRequest: (operation,args) => ipcRenderer.invoke('assistant:chat',operation,args),
   onChatChange: callback => { const listener=(_event,state)=>callback(state); ipcRenderer.on('assistant:chat-changed',listener); return ()=>ipcRenderer.removeListener('assistant:chat-changed',listener); },
   notesRequest: (operation, args) => ipcRenderer.invoke('notes:request', operation, args),
